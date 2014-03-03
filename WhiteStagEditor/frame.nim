@@ -1,3 +1,4 @@
+import unicode
 
 import view
 import drawbuffer
@@ -12,10 +13,11 @@ type
 
 proc drawTitle(self: TWindowFrame, view: PView, buff: var TDrawBuffer) =
   let frameW = view.w
-  let titleW = self.title.len
+  let titleW = self.title.runeLen
   let titleX = frameW div 2 - titleW div 2
+  let styles = if view.isFocused: {styleBold} else: {styleNormal}
   buff.writeText(titleX, 0, self.title, fg = TitleColor.color(view.isFocused), 
-    bg = FrameColor.color(view.isFocused))
+    bg = FrameColor.color(view.isFocused), styles = styles)
 
 proc drawHorizontalBorder(self: TWindowFrame, x, y, w: int, view: PView, buff: var TDrawBuffer) = 
   let borderStr = w.repeatStr("─")

@@ -17,7 +17,6 @@ type
     color: color.TColor
     rect: rect.TRegion
 
-
   TDrawingRect = tuple
     color: color.TColor
     rect: rect.TPixelRect
@@ -27,6 +26,7 @@ type
     color: color.TColor
     rect: rect.TPixelRect
     font: TFont
+    styles: set[drawbuffer.TTextStyle]
 
   PSdlEngine* = ref TSdlEngine
   TSdlEngine* = object
@@ -46,12 +46,22 @@ proc isInitialized*(self: PSdlEngine): bool = return inited
 proc clear*(self: PSdlEngine) = 
   discard sdl.fillRect(self.screen, nil, 0x000000)
 
-proc loadFont*(self: PSdlEngine, size: int, name: string = "DejaVuSansMono.ttf"): TFont = 
+proc loadSdlFont(fileName: string, size: cint): sdl_ttf.PFont  =
+  let font = OpenFont(fileName, cint(size))
+  doAssert(font != nil, "Cannot open font: " & fileName & ", size: " & $int(size))
+  return font
+
+proc loadFont*(self: PSdlEngine, size: int, name: string = "DejaVuSansMono"): TFont = 
   var font: TFont
-  font.sdlFont = OpenFont(name, cint(size))
-  doAssert(font.sdlFont != nil, "Cannot open font: " & name & ", size: " & $int(size))
+  var fileName = name
+  font.normalSdlFont = loadSdlFont(name & ".ttf", cint(size))
+
+  font.boldSdlFont = loadSdlFont(name & "-Bold.ttf", cint(size))
+  font.italicSdlFont = loadSdlFont(name & "-Oblique.ttf", cint(size))
+  font.boldItalicSdlFont = loadSdlFont(name & "-BoldOblique.ttf", cint(size))
+
   var charW, charH: cint
-  discard font.sdlFont.SizeText("A", charW, charH)
+  discard font.normalSdlFont.SizeText("A", charW, charH)
   font.charWidth = TPixel(charW)
   font.charHeight = TPixel(charH)
   font.size = size
@@ -173,10 +183,13 @@ proc collectPixelBasedRegions(buff: TDrawBuffer, offsetX, offsetY: TPixel, font:
 proc getContinousCharacters(buff: TDrawBuffer, offX: var int, offY: int): string =
   let firstCell = buff.cell(offX, offY)
   let fg = firstCell.fg
+  let styles = firstCell.styles
   var word: string = ""
   for i in offX..buff.w-1:
     let cell = buff.cell(offX, offY)
-    if cell.fg != fg:
+    let cellsDifferInColor = cell.fg != fg
+    let cellsDiffInStyle = cell.styles != styles
+    if cellsDifferInColor or cellsDiffInStyle:
       break
     let ch = if cell.ch == TRune(0): runeAt(" ", 0) else: cell.ch
     
@@ -190,7 +203,16 @@ proc toSdlColor*(c: color.TColor): sdl.TColor =
   result.b = c.b
 
 proc drawString(self: PSdlEngine, textRegion: TDrawingText) =
-  let sdlFont = textRegion.font.sdlFont
+  var sdlFont: sdl_ttf.PFont
+  if drawbuffer.styleBold in textRegion.styles and drawbuffer.styleItalic in textRegion.styles:
+    sdlFont = textRegion.font.boldItalicSdlFont
+  elif drawbuffer.styleBold in textRegion.styles:
+    sdlFont = textRegion.font.boldSdlFont
+  elif drawbuffer.styleItalic in textRegion.styles:
+    sdlFont = textRegion.font.italicSdlFont
+  else:
+    sdlFont = textRegion.font.normalSdlFont
+
   let textSurf = (sdl_ttf.RenderUTF8_Solid(sdlFont, textRegion.text, toSdlColor(textRegion.color)))
   var dstRect = sdl.TRect(x: int16(textRegion.rect.x), y: int16(textRegion.rect.y), w: uint16(textRegion.rect.w), h: uint16(textRegion.rect.h))
   discard sdl.blitSurface(textSurf, nil, self.screen, addr(dstRect))
@@ -206,6 +228,7 @@ proc collectTextRegions(buff: TDrawBuffer, offsetX, offsetY: TPixel, font: TFont
     return
   while y < buff.h: 
     let color = buff.cell(x, y).fg
+    let styles = buff.cell(x, y).styles
     let fromX = x
     let word = getContinousCharacters(buff, x, y)
     if word.len > 0:
@@ -213,7 +236,7 @@ proc collectTextRegions(buff: TDrawBuffer, offsetX, offsetY: TPixel, font: TFont
 
       let xpos = offsetX + fw * fromX
       let ypos = offsetY + fh * y
-      let textRect = (word, color, (xpos, ypos, fw * w, fh), font)
+      let textRect = (word, color, (xpos, ypos, fw * w, fh), font, styles)
       result.add(textRect)
       
     if x >= buff.w:
@@ -579,6 +602,17 @@ when isMainModule:
       check region.rect.w == TPixel(w)
       check region.rect.h == TPixel(h)
       check region.color == c
+      let emptySet: set[TTextStyle] = {}
+      check region.styles == emptySet
+
+    proc testTextRegionStyle(region: TDrawingText, x, y, w, h: int, str: string, styles: set[drawbuffer.TTextStyle]) = 
+      check region.text == str
+      check region.rect.x == TPixel(x)
+      check region.rect.y == TPixel(y)
+      check region.rect.w == TPixel(w)
+      check region.rect.h == TPixel(h)
+      check region.styles == styles
+      check region.color == ColorBlue
 
     test "collectTextRegions with 0-sized buff":
       buff = createDrawBuffer(0, 10)
@@ -603,4 +637,23 @@ when isMainModule:
       testTextRegion(rects[4], 5*10, 1*20, 5*10, 20, "Hello", ColorGreen)
 
       for i in 0..7:
-        testTextRegion(rects[5+i], 0, (2+i)*20, 10*10, 20, "          ", ColorNone)  
+        testTextRegion(rects[5+i], 0, (2+i)*20, 10*10, 20, "          ", ColorNone)
+
+    test "collectTextRegions with differentStyles":
+      # --BBBBBBBB
+      # II---QQQQQ
+      buff.writeText(2, 0, "BBBBBBBB", fg = ColorBlue, styles = {drawbuffer.styleBold})
+      buff.writeText(0, 1, "II", fg = ColorBlue, styles = {drawbuffer.styleItalic})
+      buff.writeText(5, 1, "QQQQQ", fg = ColorBlue, styles = {drawbuffer.styleBold, drawbuffer.styleItalic})
+      let font = TFont(charWidth: TPixel(10), charHeight: TPixel(20))
+      let rects = collectTextRegions(buff, TPixel(0), TPixel(0), font)
+      check 13 == rects.len
+
+      testTextRegion(rects[0], 0, 0, 2*10, 20, "  ", ColorNone)
+      testTextRegionStyle(rects[1], 2*10, 0, 8*10, 20, "BBBBBBBB", {drawbuffer.styleBold})
+      testTextRegionStyle(rects[2], 0, 1*20, 2*10, 20, "II", {drawbuffer.styleItalic})
+      testTextRegion(rects[3], 2*10, 1*20, 3*10, 20, "   ", ColorNone)  
+      testTextRegionStyle(rects[4], 5*10, 1*20, 5*10, 20, "QQQQQ", {drawbuffer.styleBold, drawbuffer.styleItalic})
+
+      for i in 0..7:
+        testTextRegion(rects[5+i], 0, (2+i)*20, 10*10, 20, "          ", ColorNone)

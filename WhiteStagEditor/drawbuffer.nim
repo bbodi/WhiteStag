@@ -4,16 +4,23 @@ import unicode
 import rect
 
 type
+
+  TTextStyle* = enum
+    styleNormal
+    styleBold,
+    styleItalic
+
   PCell = ref TCell
   TCell = tuple
     fg, bg: TColor
     ch: TRune
+    styles: set[TTextStyle]
 
   TDrawBuffer* = object
     w*, h*: int
-    cells: seq[PCell]
+    cells: seq[PCell]    
 
-const NilCel*: TCell = (fg: ColorNone, bg: ColorNone, ch: TRune(0))
+const NilCel*: TCell = (fg: ColorNone, bg: ColorNone, ch: TRune(0), styles: {})
 
 proc createDrawBuffer*(w, h: int): TDrawBuffer =
   doAssert(w >= 0 and h >= 0, $w & ", " & $h)
@@ -36,7 +43,8 @@ proc clearCell*(self: var TDrawBuffer, x, y :int) =
 proc setCell*(self: var TDrawBuffer, x, y :int, 
   fg: TColor = ColorNone,
   bg: TColor = ColorNone,
-  ch: string = nil) = 
+  ch: string = nil, 
+  styles: set[TTextStyle] = {}) = 
   if self.outOfRange(x, y):
     return
   let i = y * self.w + x
@@ -51,14 +59,17 @@ proc setCell*(self: var TDrawBuffer, x, y :int,
     cell.bg = bg
   if ch != nil:
     cell.ch = runeAt(ch, 0)
+  if styles != {}:
+    cell.styles = styles
 
 proc setCells*(self: var TDrawBuffer, x, y, w, h :int, 
   fg: TColor = ColorNone,
   bg: TColor = ColorNone,
-  ch: string = nil) = 
+  ch: string = nil,
+  styles: set[TTextStyle] = {}) = 
   for iy in 0..h-1:
     for ix in 0..w-1:
-      self.setCell(x+ix, y+iy, fg, bg, ch)
+      self.setCell(x+ix, y+iy, fg, bg, ch, styles)
 
 proc clearCells*(self: var TDrawBuffer, x, y, w, h :int) = 
   for iy in 0..h-1:
@@ -66,10 +77,10 @@ proc clearCells*(self: var TDrawBuffer, x, y, w, h :int) =
       self.clearCell(x+ix, y+iy)
 
 proc writeText*(self: var TDrawBuffer, x, y: int, text: string, 
-  fg: TColor = ColorNone, bg: TColor = ColorNone) = 
+  fg: TColor = ColorNone, bg: TColor = ColorNone, styles: set[TTextStyle] = {}) = 
   var i = 0
   for ch in runes(text):
-    self.setCell(x+i, y, fg, bg, "" & $ch)
+    self.setCell(x+i, y, fg, bg, "" & $ch, styles)
     inc i
 
 proc cell*(self: TDrawBuffer, x, y: int): TCell = 

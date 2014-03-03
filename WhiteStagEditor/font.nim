@@ -6,4 +6,7 @@ type
   TFont* = object
     charWidth*, charHeight*: TPixel
     size*: int
-    sdlFont*: PFont
+    normalSdlFont*: PFont
+    italicSdlFont*: PFont
+    boldSdlFont*: PFont
+    boldItalicSdlFont*: PFont

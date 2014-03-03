@@ -85,10 +85,8 @@ proc changedStructure*(self: PTree) =
   let lastIndex = self.assignCellViewsToNodes(self.pRootNode.data, 0, 0)
   self.allNodesAreDrawn = lastIndex != -1
   if self.pRowCount == 0:
-    echo("if self.pRowCount == 0:")
     self.pSelectedIndex = none[int]()
   else:
-    echo("qweqweqweqwe qwe q qw")
     self.pSelectedIndex.withData do (selectedIndex: var int):
       if selectedIndex >= self.pRowCount:
         selectedIndex = self.pRowCount-1
