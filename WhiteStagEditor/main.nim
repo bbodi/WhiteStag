@@ -28,8 +28,6 @@ let win1 = createWindow(20, 10, "ó")
 win1.closeable = true
 win1.resizable = true
 
-let scrollable = createScrollableViewWrapper(38, 18)
-
 let win2 = createWindow(40, 20, "Teszt2")
 
 let radioGrp = createRadioGroupWithoutFrame()
@@ -97,18 +95,17 @@ prgBarWithCustomText.text = "Custom Text"
 prgBarWithCustomText.value = 50
 
 win2.resizable = true
-win2.addView(scrollable, 1, 1)
 let scroll = win2.AddScrollBarToRight()
 scroll.setRange(0, 100)
-scrollable.addView(prgBar, 6, 12)
-scrollable.addView(prgBarWithCustomText, 6, 14)
-scrollable.addView(btn1, 6, 16)
-scrollable.addView(btn2, 16, 16)
-scrollable.addView(radioGrp2, 1, 0)
-scrollable.addView(radioGrp, 14, 0)
+win2.addView(prgBar, 6, 12)
+win2.addView(prgBarWithCustomText, 6, 14)
+win2.addView(btn1, 6, 16)
+win2.addView(btn2, 16, 16)
+win2.addView(radioGrp2, 1, 2)
+win2.addView(radioGrp, 14, 2)
 
-scrollable.addView(checkBoxGrp, 1, 6)
-scrollable.addView(checkBoxGrp2, 14, 4)
+win2.addView(checkBoxGrp, 1, 8)
+win2.addView(checkBoxGrp2, 14, 6)
 
 deskt.addView(createTextField(10), 3, 1)
 

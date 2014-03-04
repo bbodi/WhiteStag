@@ -8,7 +8,6 @@ import color
 import drawbuffer
 import font
 import sdlengine
-import group
 import bytestream
 
 var engine*: PSdlEngine
@@ -391,6 +390,24 @@ proc setCurrentView*(view: TOption[PView]) =
 proc setCurrentView*(view: PView) = 
   setCurrentView(some[PView](view))
 
+proc selectNext*(self: PView, backward: bool = false) =
+  if currentView.isNone:
+    if self.views.len == 0:
+      return
+    if not backward:
+      setCurrentView(self.views[0])
+    else:
+      setCurrentView(self.views[high(self.views)])
+    return
+  var index = self.views.find(currentView.data)
+  if index == -1:
+    return
+  if not backward and index == self.views.len-1:
+    index = 0
+  if backward and index == 0:
+    index = self.views.len-1
+  setCurrentView(self.views[index])
+
 proc addView*(self: PView, child: PView, x, y: int) = 
   if self.views == nil:
     self.views = @[]
@@ -403,9 +420,9 @@ proc calcCenterPos(parent: PView, child: PView): tuple[x, y: int] =
   result.x = (parent.w div 2) - (child.w div 2)
   result.y = (parent.h div 2) - (child.h div 2)
 
-proc addViewAtCenter*(self: PView, child: PView) = 
+proc addViewAtCenter*(self: PView, child: PView, yOffset: int = 0) = 
   let center = calcCenterPos(self, child)
-  addView(self, child, center.x, center.y)
+  addView(self, child, center.x, center.y + yOffset)
 
 proc addViewAtCenterX*(self: PView, child: PView, y: int) = 
   let center = calcCenterPos(self, child)

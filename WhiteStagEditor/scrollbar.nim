@@ -53,7 +53,7 @@ method handleEvent*(self: PScrollBar, event: PEvent) =
     self.broadcastCommand(cmdScrollBarChanged, self)
     event.setProcessed()
   elif event.kind == TEventKind.eventKey:
-    event.setProcessed()
+    discard
 
 method draw*(self: PScrollBar): TDrawBuffer = 
   var buff = createDrawBuffer(self.w, self.h)

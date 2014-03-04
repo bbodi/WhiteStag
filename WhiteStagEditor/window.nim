@@ -47,6 +47,16 @@ proc resize(self: PWindow, deltaX, deltaY: int) =
 
 proc windowHandleEvent*(self: PWindow, event: PEvent) = 
   case event.kind:
+  of TEventKind.eventKey:
+    case event.key:
+    of TKey.KeyArrowDown, TKey.KeyArrowRight, TKey.KeyTab:
+      self.selectNext()
+      event.setProcessed()
+    of TKey.KeyArrowUp, TKey.KeyArrowLeft:
+      self.selectNext(backward = true)
+      event.setProcessed()
+    else:
+      discard
   of TEventKind.eventMouseButtonDown:
     if event.local and self.clickedInFontChooser(event) and self.resizable:
       let fontSize = cast[string](self.executeView(fontSelectBox, self.w-9, 1).data)

@@ -42,13 +42,14 @@ method handleEvent*(self: PButton, event: PEvent) =
     discard
 
 method draw*(self: PButton): TDrawBuffer = 
+  let styles = if self.isCurrentView: {styleBold} else: {styleNormal}
   self.buff.setCells(0, 0, self.w, self.h, bg = ButtonColor.color(self.disabled, self.pressed))
-  self.buff.writeText(1, 0, self.label)
+  self.buff.writeText(1, 0, self.label, styles = styles)
   return self.buff
 
 proc createButton*(label: string, cmd: TCmd, disabled: bool = false): PButton = 
   result = new(TButton)
-  result.setWidthHeight(label.len + 2, 1)
+  result.setWidthHeight(label.runeLen + 2, 1)
   result.label = label
   result.disabled = disabled
   result.cmd = cmd
@@ -60,6 +61,10 @@ when isMainModule:
     let view: PView = createButton("title", cmdOk)
     check "Button(title)" == view.name
     discard view.draw()
+
+  test "buttons is as wide as its label":
+    let view: PView = createButton("ékezetes betűk", cmdOk)
+    check view.w == 14 + 2
 
   test "writeData":
     let view: PView = createButton("title", cmdOk)
