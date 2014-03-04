@@ -107,6 +107,7 @@ proc clip*(self: var TDrawBuffer, fromX, fromY, dstW, dstH: int) =
 
 when isMainModule:
   import unittest
+  const emptyStyles: set[TTextStyle] = {}
 
   suite "TDrawBuffer Test Suite":
     setup:
@@ -138,20 +139,20 @@ when isMainModule:
     test "setCell fg":
       buff.setCell(5, 5, fg = ColorRed)
       let cell = buff.cells[5*10+5]
-      check cell[] == (ColorRed, ColorNone, TRune(0))
+      check cell[] == (ColorRed, ColorNone, TRune(0), emptyStyles)
       checkNilCellCount(buff, 10*10-1)
       
 
     test "setCell bg":
       buff.setCell(5, 5, bg = ColorRed)
       let cell = buff.cells[5*10+5]
-      check cell[] == (ColorNone, ColorRed, TRune(0))
+      check cell[] == (ColorNone, ColorRed, TRune(0), emptyStyles)
       checkNilCellCount(buff, 10*10-1)
 
     test "setCell ch":
       buff.setCell(5, 5, ch = "a")
       let cell = buff.cells[5*10+5]
-      check cell[] == (ColorNone, ColorNone, runeAt("a", 0))
+      check cell[] == (ColorNone, ColorNone, runeAt("a", 0), emptyStyles)
       checkNilCellCount(buff, 10*10-1)
 
     test "setCells fg":
@@ -159,7 +160,7 @@ when isMainModule:
       for y in 5..7:
         for x in 5..7:
           let cell = buff.cells[y*10+x]
-          check cell[] == (ColorRed, ColorNone, TRune(0))
+          check cell[] == (ColorRed, ColorNone, TRune(0), emptyStyles)
       checkNilCellCount(buff, 10*10-3*3)
       
 
@@ -168,7 +169,7 @@ when isMainModule:
       for y in 5..7:
         for x in 5..7:
           let cell = buff.cells[y*10+x]
-          check cell[] == (ColorNone, ColorRed, TRune(0))
+          check cell[] == (ColorNone, ColorRed, TRune(0), emptyStyles)
       checkNilCellCount(buff, 10*10-3*3)
 
     test "setCells ch":
@@ -176,14 +177,14 @@ when isMainModule:
       for y in 5..7:
         for x in 5..7:
           let cell = buff.cells[y*10+x]
-          check cell[] == (ColorNone, ColorNone, runeAt("a", 0))
+          check cell[] == (ColorNone, ColorNone, runeAt("a", 0), emptyStyles)
       checkNilCellCount(buff, 10*10-3*3)
 
     test "writeText":
       buff.writeText(3, 3, "test", fg = ColorRed, bg = ColorBlue)
       for i, ch in "test":
         let cell = buff.cells[3*10+3+i]
-        check cell[] == (ColorRed, ColorBlue, runeAt("test", i))
+        check cell[] == (ColorRed, ColorBlue, runeAt("test", i), emptyStyles)
 
     test "index operator":
       buff.setCell(3, 3, fg = ColorRed, bg = ColorBlue, ch = "a")
@@ -202,9 +203,9 @@ when isMainModule:
 
     test "modifying cell":
       buff.setCell(5, 5, ch = "ó")
-      check (buff.cell(5, 5) == (ColorNone, ColorNone, runeAt("ó", 0)))
+      check (buff.cell(5, 5) == (ColorNone, ColorNone, runeAt("ó", 0), emptyStyles))
       buff.setCell(5, 5, ch = "b")
-      check (buff.cell(5, 5) == (ColorNone, ColorNone, runeAt("b", 0)))
+      check (buff.cell(5, 5) == (ColorNone, ColorNone, runeAt("b", 0), emptyStyles))
 
     test "clipping":
       check buff.w == 10
