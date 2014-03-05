@@ -129,7 +129,7 @@ proc handleKey*(self: PTree, event: PEvent) =
     if self.pSelectedIndex.isNone:
       if self.rowCount > 0:
         self.pSelectedIndex = some(0)
-        setCurrentView(self.cellViews[0])
+        self.cellViews[0].setFocused()
         self.modified()
       return
     self.pSelectedIndex.withData do (selectedIndex: var int):

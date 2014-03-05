@@ -176,3 +176,29 @@ when isMainModule:
     view.readData(stream)
     check(stream.data == "")
     check(stream.getPosition == 0)
+
+  test "pressing tab":
+    var testv0 = PTestView()
+    var testv1 = PTestView()
+    var testv2 = PTestView()
+    let win: PWindow = createWindow(10, 10, "test")
+    win.addView(testv0, 0, 0)
+    win.addView(testv1, 0, 0)
+    win.addView(testv2, 0, 0)
+    clearCurrentView()
+
+    proc tabKeyEvent(): PEvent = PEvent(kind: TEventKind.eventKey, key: TKey.KeyTab)
+
+    win.handleEvent(tabKeyEvent())
+    check testv0.isCurrentView
+
+    win.handleEvent(tabKeyEvent())
+    check testv1.isCurrentView
+
+    win.handleEvent(tabKeyEvent())
+    check testv2.isCurrentView
+
+    win.handleEvent(tabKeyEvent())
+    check testv0.isCurrentView
+
+    

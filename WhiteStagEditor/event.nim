@@ -58,8 +58,6 @@ type
     eventKeyRepeat,
     eventLostFocus,
     eventGetFocus,
-    eventBecomeCurrentView,
-    eventNotCurrentAnymore,
     eventTick,
     eventWindowResized
 
@@ -83,7 +81,7 @@ type
       unicode*: TRune
       key*: TKey
       keyModifier*: TKeyModifier
-    of eventLostFocus, eventGetFocus, eventNotCurrentAnymore, eventBecomeCurrentView: 
+    of eventLostFocus, eventGetFocus: 
       view*: pointer
     of eventTick: nil
     of eventWindowResized:
