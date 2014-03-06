@@ -53,27 +53,27 @@ proc handleKey*(self: PList, event: PEvent) =
     if self.pSelectedIndex.isNone:
       if self.rowCount > 0:
         self.pSelectedIndex = some(0)
-        setCurrentView(self.cellViews[0])
+        self.cellViews[0].setFocused()
         self.modified()
       return
     self.pSelectedIndex.withData do (selectedIndex: var int):
       if selectedIndex < self.rowCount - 1:
         inc selectedIndex
         self.modified()
-        setCurrentView(self.cellViews[selectedIndex])
+        self.cellViews[selectedIndex].setFocused()
   of TKey.KeyArrowUp:
     event.setProcessed()
     if self.pSelectedIndex.isNone:
       if self.rowCount > 0:
         self.pSelectedIndex = some(self.rowCount-1)
-        setCurrentView(self.cellViews[self.rowCount-1])
+        self.cellViews[self.rowCount-1].setFocused()
         self.modified()
       return
     self.pSelectedIndex.withData do (selectedIndex: var int):
       if selectedIndex > 0:
         dec selectedIndex
         self.modified()
-        setCurrentView(self.cellViews[selectedIndex])
+        self.cellViews[selectedIndex].setFocused()
   of TKey.KeyEnter:
     event.setProcessed()
   else:
@@ -104,11 +104,11 @@ method handleEvent(self: PList, event: PEvent) =
       event.setProcessed()
   of TEventKind.eventKey:
     self.handleKey(event)
-  of TEventKind.eventBecomeCurrentView:
+  of TEventKind.eventGetFocus:
     let listWasSelected = event.sourceViewEquals(self)
     if listWasSelected:
       self.pSelectedIndex.ifSome do (selectedIndex: int):
-        setCurrentView(self.cellViews[selectedIndex])
+        self.cellViews[selectedIndex].setFocused()
     else:
       self.setSelectedIndexToTheFocusedChild(event)
   else:
@@ -206,19 +206,19 @@ when isMainModule:
 
     test "clicking on Items sets the selectedIndex of the List":
       list.broadcast(PEvent(kind: TEventKind.eventMouseButtonDown, mouseX: TPixel(1), mouseY: TPixel(1)))
-      echo "1"
+
       check list.selectedIndex.isSome
       check list.selectedIndex.data == 1
       list.broadcast(PEvent(kind: TEventKind.eventMouseButtonDown, mouseX: TPixel(1), mouseY: TPixel(0)))
-      echo "2"
+
       check list.selectedIndex.isSome
       check list.selectedIndex.data == 0
       list.broadcast(PEvent(kind: TEventKind.eventMouseButtonDown, mouseX: TPixel(1), mouseY: TPixel(1)))
-      echo "3"
+      
       check list.selectedIndex.isSome
       check list.selectedIndex.data == 1
       list.broadcast(PEvent(kind: TEventKind.eventMouseButtonDown, mouseX: TPixel(1), mouseY: TPixel(2)))
-      echo "4"
+      
       check list.selectedIndex.isSome
       check list.selectedIndex.data == 2
 

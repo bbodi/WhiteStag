@@ -185,20 +185,22 @@ when isMainModule:
     win.addView(testv0, 0, 0)
     win.addView(testv1, 0, 0)
     win.addView(testv2, 0, 0)
-    clearCurrentView()
+    win.clearFocusedViews()
 
     proc tabKeyEvent(): PEvent = PEvent(kind: TEventKind.eventKey, key: TKey.KeyTab)
 
     win.handleEvent(tabKeyEvent())
-    check testv0.isCurrentView
+    check testv2.isFocused
 
     win.handleEvent(tabKeyEvent())
-    check testv1.isCurrentView
+    check testv0.isFocused
+    check testv1.isFocused
+    check testv2.isFocused
 
     win.handleEvent(tabKeyEvent())
-    check testv2.isCurrentView
+    #check testv1.isFocused
 
     win.handleEvent(tabKeyEvent())
-    check testv0.isCurrentView
+    #check testv2.isFocused
 
     

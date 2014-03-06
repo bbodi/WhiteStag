@@ -23,6 +23,7 @@ type
 proc execProcesses(exeNames: openarray[string]): seq[TTestModule] =
   var tests: seq[TTestModule] = @[]
   for exeName in exeNames:
+    echo exeName & " ..."
     var p = startCmd(exeName)
     var outp = outputStream(p)
     var line = newStringOfCap(120).TaintedString
@@ -30,12 +31,12 @@ proc execProcesses(exeNames: openarray[string]): seq[TTestModule] =
     while true:
       if outp.readLine(line):
         if "[OK]" == line[0..3]:
-          let testName = line[5.high(line)]
+          let testName = line[5..high(line)]
           let result = TUnitTest(succes: true, name: testName, moduleName: exeName)
           testModule.tests.add(result)
           inc testModule.successfulTestCount
         elif "[FAILED]" == line[0..7]:
-          let testName = line[9.high(line)]
+          let testName = line[9..high(line)]
           let result = TUnitTest(succes: false, name: testName, moduleName: exeName)
           testModule.tests.add(result)
           inc testModule.failedTestCount

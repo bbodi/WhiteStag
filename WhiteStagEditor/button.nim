@@ -42,7 +42,7 @@ method handleEvent*(self: PButton, event: PEvent) =
     discard
 
 method draw*(self: PButton): TDrawBuffer = 
-  let styles = if self.isCurrentView: {styleBold} else: {styleNormal}
+  let styles = if self.isFocused: {styleBold} else: {styleNormal}
   self.buff.setCells(0, 0, self.w, self.h, bg = ButtonColor.color(self.disabled, self.pressed))
   self.buff.writeText(1, 0, self.label, styles = styles)
   return self.buff

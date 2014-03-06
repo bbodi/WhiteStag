@@ -35,11 +35,11 @@ method handleEvent*(self: PDialog, event: PEvent) =
     elif event.cmd == cmdCancel and event.isFrom(self.cancelBtn):
       self.stopExecuting(cmdCancel)
       event.setProcessed()
-  of TEventKind.eventBecomeCurrentView:
+  of TEventKind.eventGetFocus:
     let dialogJustOpened = event.sourceViewEquals(self)
     if dialogJustOpened:
       let lastView = self.views[high(self.views)]
-      setCurrentView(lastView)
+      lastView.setFocused()
   else:
     discard
   windowHandleEvent(self, event)

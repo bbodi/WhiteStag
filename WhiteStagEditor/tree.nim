@@ -141,20 +141,20 @@ proc handleKey*(self: PTree, event: PEvent) =
         else:
           inc selectedIndex
         self.modified()
-        setCurrentView(self.cellViews[selectedIndex])
+        self.cellViews[selectedIndex].setFocused()
   of TKey.KeyArrowUp:
     event.setProcessed()
     if self.pSelectedIndex.isNone:
       if self.rowCount > 0:
         self.pSelectedIndex = some(self.rowCount-1)
-        setCurrentView(self.cellViews[self.rowCount-1])
+        self.cellViews[self.rowCount-1].setFocused()
         self.modified()
       return
     self.pSelectedIndex.withData do (selectedIndex: var int):
       if selectedIndex > 0:
         dec selectedIndex
         self.modified()
-        setCurrentView(self.cellViews[selectedIndex])
+        self.cellViews[selectedIndex].setFocused()
       elif self.skippedNodes > 0:
         dec self.startIndex
         self.changedStructure()
@@ -195,12 +195,12 @@ method handleEvent(self: PTree, event: PEvent) =
       event.setProcessed()
   of TEventKind.eventKey:
     self.handleKey(event)
-  of TEventKind.eventGetFocus, TEventKind.eventBecomeCurrentView:
-    let treeWasSelected = event.kind == TEventKind.eventBecomeCurrentView and event.sourceViewEquals(self)
-    if treeWasSelected:
-      self.pSelectedIndex.ifSome do (selectedIndex: int):
-        setCurrentView(self.cellViews[selectedIndex])
-      return
+  of TEventKind.eventGetFocus:
+    #let treeWasSelected = event.kind == TEventKind.eventBecomeCurrentView and event.sourceViewEquals(self)
+    #if treeWasSelected:
+    #  self.pSelectedIndex.ifSome do (selectedIndex: int):
+    #    setCurrentView(self.cellViews[selectedIndex])
+    #  return
     self.setSelectedIndexToTheFocusedChild(event)
   else:
     discard

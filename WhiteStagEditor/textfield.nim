@@ -95,7 +95,7 @@ method handleEvent*(self: PTextField, event: PEvent) =
   of TEventKind.eventMouseButtonDown:
     discard
   of TEventKind.eventKey:
-    if self.isCurrentView:
+    if self.isFocused:
       self.handleKey(event)
   of TEventKind.eventTick:
     self.showCursor = not self.showCursor
@@ -112,7 +112,7 @@ proc drawCursor(self: PTextField) =
 method draw*(self: PTextField): TDrawBuffer = 
   self.buff.setCells(0, 0, self.w, self.h, ch="", bg = TextPanelColor.color(self.isFocused))
   self.buff.writeText(0, 0, self.text, fg = TextPanelTextColor.color(self.isFocused))
-  if self.isCurrentView:
+  if self.isFocused:
     self.drawCursor()
   return self.buff
 
@@ -127,9 +127,11 @@ when isMainModule:
 
   suite "TextField Test Suite":
     setup:
+      let parent = PTestView()
       let field: PTextField = createTextField(10)
       field.text = "tést"
-      setCurrentView(field)
+      parent.addView(field, 0, 0)
+      field.setFocused()
       
     test "inheritance":
       let view: PView = createTextField(10)

@@ -371,8 +371,11 @@ proc removeFromLinkedList(self: PView, childToDelete: PView) =
 proc makeLast(self: PView, child: PView) =
   if self.views.len <= 1:
     return
-  self.removeFromLinkedList(child)
-  self.insertLast(child)
+  if self.bottomView.equals(child):
+    self.bottomView = self.bottomView.data.nextView
+    if self.bottomView.isNone and self.views.len > 0:
+      self.bottomView = some(self.views[0])
+  self.topView = some(child)
 
 proc makeMeLast(self: PView) =
     if self.owner.isNone:
@@ -380,7 +383,7 @@ proc makeMeLast(self: PView) =
     self.owner.data.makeLast(self)
     self.owner.data.makeMeLast()
 
-proc clearFocusedViews(self: PView) =
+proc clearFocusedViews*(self: PView) =
   self.focusedView.ifSome do (focusedView: PView):
     focusedView.broadcast(PEvent(kind: TEventKind.eventLostFocus, view: cast[pointer](focusedView)))
 
@@ -401,8 +404,8 @@ proc setFocused*(self: PView) =
   if self.owner.isSome:
     self.owner.data.setChildFocused(self)
   self.broadcast(PEvent(kind: TEventKind.eventGetFocus, view: cast[pointer](self)))
-  self.owner.ifSome do (parent: PView):
-      parent.setFocused()
+  #self.owner.ifSome do (parent: PView):
+  #    parent.setFocused()
 
 proc changeSwapFocusedViewTo(self: PView, child: PView) =
   self.focusedView.ifSome do (focusedView: PView):
@@ -415,14 +418,17 @@ proc selectNext*(self: PView, backward: bool = false) =
     if self.views.len == 0:
       return
     if not backward:
+      echo "topView"
       self.topView.expect("views.len > 0").setFocused()
     else:
       self.bottomView.expect("views.len > 0").setFocused()
     return
   let focusedView = self.focusedView.data
   if not backward and focusedView.nextView.isNone:
+    echo ("roundup with " & self.bottomView.data.name)
     self.changeSwapFocusedViewTo(self.bottomView.data)
     return
+  echo ("sima with " & focusedView.nextView.data.name)
   self.changeSwapFocusedViewTo(focusedView.nextView.data)
 
 proc addView*(self: PView, child: PView, x, y: int) = 
@@ -544,13 +550,14 @@ proc executeViewAtCenter*(self, view: PView): TExecutingResult =
 type 
   PTestView* = ref TTestView
   TTestView* = object of TView
+    name: string
     events*: seq[PEvent]
     recordingEvents*: bool
 
 method writeData(self: PTestView, stream: PStringStream) = discard
 method readData(self: PTestView, stream: PStringStream) = discard
 
-method name(self: PTestView): string = "PTestView"
+method name(self: PTestView): string = "PTestView(" & self.name & ")"
 
 method handleEvent(self: PTestView, event: PEvent) =
   if not self.recordingEvents:
@@ -567,10 +574,10 @@ when isMainModule:
 
   suite "View Test Suite":
     setup:
-      var testv0 = PTestView(events : @[], recordingEvents : false)
-      var testv1 = PTestView(events : @[], recordingEvents : false)
-      var testv2 = PTestView(events : @[], recordingEvents : false)
-      var testv3 = PTestView(events : @[], recordingEvents : false)
+      var testv0 = PTestView(name: "testv0", events : @[], recordingEvents : false)
+      var testv1 = PTestView(name: "testv1", events : @[], recordingEvents : false)
+      var testv2 = PTestView(name: "testv2", events : @[], recordingEvents : false)
+      var testv3 = PTestView(name: "testv3", events : @[], recordingEvents : false)
       var v0: PView = testv0
       var v1: PView = testv1
       var v2: PView = testv2
@@ -1063,6 +1070,44 @@ when isMainModule:
       v0.setWidthHeight(0, 1)
       check v0.w == 2
       check v0.h == 2
+
+    test "selectNext":
+      let win = PTestView()
+      win.addView(testv0, 0, 0)
+      win.addView(testv1, 0, 0)
+      win.addView(testv2, 0, 0)
+
+      proc checkViewOrder(bottom, top: PView) =
+        check testv0.prevView.isNone
+        check testv0.nextView.data == testv1
+        check testv1.prevView.data == testv0
+        check testv1.nextView.data == testv2
+        check testv2.prevView.data == testv1
+        check testv2.nextView.isNone
+
+        check win.bottomView.data == bottom
+        check win.topView.data == top
+
+      win.clearFocusedViews()
+
+      checkViewOrder(testv0, testv2)
+      check win.focusedView.isNone
+
+      win.selectNext()
+      check testv2.isFocused
+      checkViewOrder(testv0, testv2)
+
+      win.selectNext()
+      check testv0.isFocused
+      checkViewOrder(testv1, testv0)
+
+      win.selectNext()
+      check testv1.isFocused
+      checkViewOrder(testv2, testv1)
+
+      win.selectNext()
+      check testv2.isFocused
+      checkViewOrder(testv0, testv2)
 
     # TODO: jó sorrendben rajzolódnak ki
     # TODO: jó sorrendben kezelik le az eseményeket
