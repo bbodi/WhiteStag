@@ -396,22 +396,26 @@ proc clearFocusedViews*(self: PView) =
 proc setChildFocused(self: PView, child: PView) =
   self.clearFocusedViews()
   self.focusedView = some(child)
-  
 
+proc setMyParentsFocused(self: PView) =
+  self.owner.ifSome do (parent: PView):
+    parent.makeMeLast()
+    parent.setChildFocused(self)
+    parent.setMyParentsFocused()
+  
 # Unit testet arra az esetre, ha már egy fókuszált elemre kerül a fókusz
 proc setFocused*(self: PView) =
   self.makeMeLast()
-  if self.owner.isSome:
-    self.owner.data.setChildFocused(self)
+  self.setMyParentsFocused()
   self.broadcast(PEvent(kind: TEventKind.eventGetFocus, view: cast[pointer](self)))
-  #self.owner.ifSome do (parent: PView):
-  #    parent.setFocused()
+  
 
 proc changeSwapFocusedViewTo(self: PView, child: PView) =
   self.focusedView.ifSome do (focusedView: PView):
     focusedView.broadcast(PEvent(kind: TEventKind.eventLostFocus, view: cast[pointer](focusedView)))
   self.broadcast(PEvent(kind: TEventKind.eventGetFocus, view: cast[pointer](child)))
   self.makeLast(child)
+  self.focusedView = some(child)
 
 proc selectNext*(self: PView, backward: bool = false) =
   if self.focusedView.isNone:
@@ -925,16 +929,13 @@ when isMainModule:
       testv3.startRecordingEvents()
 
       v3.setFocused()
-      let actialView = testv3
+      let viewThatGotFocus = testv3
 
       proc checkViewsGotTheRightEvents(testView: PTestView) =
-        check(testView.events.len == 4)
-        check(testView.events[0].kind == TEventKind.eventGetFocus)
-        check(testView.events[0].sourceViewEquals(actialView))
-        let focusedViews = [v2, v1, v0]
-        for i, event in testView.events[1..3]:
-          check(event.kind == TEventKind.eventGetFocus)
-          check(event.sourceViewEquals(focusedViews[i]))
+        check(testView.events.len == 1)
+        let event = testView.events[0]
+        check(event.kind == TEventKind.eventGetFocus)
+        check(event.sourceViewEquals(viewThatGotFocus))
 
       checkViewsGotTheRightEvents(testv3)
       checkViewsGotTheRightEvents(testv2)
@@ -965,10 +966,14 @@ when isMainModule:
 
       proc checkViewsGotTheRightEvents(testView: PTestView) =
         check(testView.events.len == 3)
-        let focusedViews = [v3, v2, v1]
+        let viewsThatLostTheirFocus = [v3, v2, v1]
         for i, event in testView.events[0..2]:
           check(event.kind == TEventKind.eventLostFocus)
-          check(event.sourceViewEquals(focusedViews[i]))
+          check(event.sourceViewEquals(viewsThatLostTheirFocus[i]))
+        #let event = testView.events[0]
+        #check(event.kind == TEventKind.eventLostFocus)
+        #check(event.sourceViewEquals(viewThatLostCurrentState))
+          
 
       checkViewsGotTheRightEvents(testv3)
       checkViewsGotTheRightEvents(testv2)

@@ -21,7 +21,7 @@ proc drawTitle(self: TWindowFrame, view: PView, buff: var TDrawBuffer) =
 
 proc drawHorizontalBorder(self: TWindowFrame, x, y, w: int, view: PView, buff: var TDrawBuffer) = 
   let borderStr = w.repeatStr("─")
-  buff.writeText(x, y, borderStr, BorderColor.color(view.isFocused), FrameColor.color(view.isFocused))
+  buff.writeText(x, y, borderStr, BorderColor.color(view.isFocused), FrameColor.color(view.isFocused), styles={styleNormal})
     
 
 proc drawVerticalBorder(self: TWindowFrame, x, y, h: int, view: PView, buff: var TDrawBuffer) = 
