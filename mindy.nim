@@ -17,6 +17,7 @@ import WhiteStagEditor/tree
 import WhiteStagEditor/stringtree
 import WhiteStagEditor/dialog
 import WhiteStagEditor/list
+import WhiteStagEditor/textarea
 
 type
   TMindy* = object of TApplication
@@ -27,21 +28,27 @@ discard usersMenu.addItem("Béla", cmdOk)
 discard usersMenu.addItem("Károly", cmdOk)
 discard usersMenu.addItem("Józsi", cmdOk)
 
-var menuWindow = createWindow(25, 10, "Projects")
+var questionEditorWindow = createWindow(55, 25, "Adding new question")
+questionEditorWindow.closeable = false
+questionEditorWindow.resizable = false
+questionEditorWindow.growMode = {}
+questionEditorWindow.addView(createTextArea(51, 10), 2, 1)
+
+var menuWindow = createWindow(35, 10, "Projects")
 menuWindow.closeable = false
 menuWindow.resizable = false
 menuWindow.growMode = {}
 
 var application = new(TMindy)
 
-var deskt = createDesktop(application, 40, 30, 16)
+var deskt = createDesktop(application, 60, 30, 16)
 deskt.addViewAtCenter(menuWindow)
 
 var switchUserButton = createButton("Felhasználó váltása", TCmd("switchUserButton"))
 var startButton = createButton("Kezdés", TCmd("Start"))
-var newButton = createButton("Új hozzáadása", TCmd("Start"))
+var newButton = createButton("Új hozzáadása", TCmd("addNewQuestion"))
 var editButton = createButton("Szerkesztés", TCmd("Start"))
-var exitButton = createButton("Kilépés", TCmd("Start"))
+var exitButton = createButton("Kilépés", cmdCancel)
 menuWindow.addViewAtCenter(switchUserButton, -2)
 menuWindow.addViewAtCenter(startButton, -1)
 menuWindow.addViewAtCenter(newButton, 0)
@@ -61,5 +68,7 @@ method handleEvent(self: ref TMindy, event: PEvent) =
       let resultNameString = cast[string](result.data)
       menuWindow.title = resultNameString
       menuWindow.modified()
+    elif event.cmd == TCmd("addNewQuestion"):
+      let result = deskt.executeView(questionEditorWindow, 0, 0)
   else:
     discard

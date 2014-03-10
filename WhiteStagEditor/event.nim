@@ -34,7 +34,8 @@ type
     KeyAlt,
     KeyBackspace,
     KeySpace,
-    KeyEsc
+    KeyEsc,
+    KeyShift,
 
   TKeyModifier* = object
     leftAlt*, rightAlt*, alt*: bool
@@ -81,6 +82,7 @@ type
       unicode*: TRune
       key*: TKey
       keyModifier*: TKeyModifier
+      up*: bool
     of eventLostFocus, eventGetFocus: 
       view*: pointer
     of eventTick: nil

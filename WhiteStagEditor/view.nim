@@ -422,18 +422,21 @@ proc selectNext*(self: PView, backward: bool = false) =
     if self.views.len == 0:
       return
     if not backward:
-      echo "topView"
       self.topView.expect("views.len > 0").setFocused()
     else:
       self.bottomView.expect("views.len > 0").setFocused()
     return
   let focusedView = self.focusedView.data
-  if not backward and focusedView.nextView.isNone:
-    echo ("roundup with " & self.bottomView.data.name)
-    self.changeSwapFocusedViewTo(self.bottomView.data)
-    return
-  echo ("sima with " & focusedView.nextView.data.name)
-  self.changeSwapFocusedViewTo(focusedView.nextView.data)
+  if not backward:
+    if focusedView.nextView.isNone:
+      self.changeSwapFocusedViewTo(self.bottomView.data)
+      return
+    self.changeSwapFocusedViewTo(focusedView.nextView.data)
+  else:
+    if focusedView.prevView.isNone:
+      self.changeSwapFocusedViewTo(self.topView.data)
+      return
+    self.changeSwapFocusedViewTo(focusedView.prevView.data)
 
 proc addView*(self: PView, child: PView, x, y: int) = 
   if self.views == nil:
@@ -1113,6 +1116,10 @@ when isMainModule:
       win.selectNext()
       check testv2.isFocused
       checkViewOrder(testv0, testv2)
+
+      win.selectNext(backward = true)
+      check testv1.isFocused
+      checkViewOrder(testv0, testv1)
 
     # TODO: jó sorrendben rajzolódnak ki
     # TODO: jó sorrendben kezelik le az eseményeket
