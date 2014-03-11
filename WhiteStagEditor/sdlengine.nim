@@ -339,11 +339,11 @@ proc convertKey(ev: PKeyboardEvent): event.TKey =
   of sdl.K_SCROLLOCK:
     return event.TKey.KeyModifier
   of sdl.K_RSHIFT, sdl.K_LSHIFT:
-    return event.TKey.Shift
+    return event.TKey.KeyShift
   of sdl.K_RCTRL, sdl.K_LCTRL:
-    return event.TKey.Ctrl
+    return event.TKey.KeyCtrl
   of sdl.K_RALT, sdl.K_LALT:
-    return event.TKey.Alt
+    return event.TKey.KeyAlt
   else:
     return event.TKey.KeyNormal
 
@@ -358,7 +358,12 @@ proc readMouseButton(ev: PMouseButtonEvent): TMouseButton =
 
 proc processSdlEvent(self: PSdlEngine, sdlEvent: sdl.PEvent): event.PEvent =
   case sdlEvent.kind:
-  of sdl.KEYDOWN, sdl.KEYUP:
+  of sdl.KEYUP:
+    let t = EvKeyboard(sdlEvent)
+    result = event.PEvent(kind: eventKeyUp)
+    result.key = convertKey(t)
+
+  of sdl.KEYDOWN:
     let t = EvKeyboard(sdlEvent)
     result = event.PEvent(kind: eventKey)
     
@@ -369,7 +374,6 @@ proc processSdlEvent(self: PSdlEngine, sdlEvent: sdl.PEvent): event.PEvent =
         result.ch = char(t.keysym.sym)
       else:
         result.ch = '?'
-    
     result.keyModifier = convertModificationButtons(t)
   of sdl.MOUSEBUTTONDOWN:
     let t = EvMouseButton(sdlEvent)

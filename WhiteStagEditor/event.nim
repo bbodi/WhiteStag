@@ -56,6 +56,7 @@ type
     eventMouseButtonUp,
     eventMouseMove,
     eventKey,
+    eventKeyUp
     eventKeyRepeat,
     eventLostFocus,
     eventGetFocus,
@@ -77,12 +78,11 @@ type
       mouseButton*: TMouseButton
       local*: bool
       localMouseX*, localMouseY*: int
-    of eventKey, eventKeyRepeat:
+    of eventKey, eventKeyRepeat, eventKeyUp:
       ch*: char
       unicode*: TRune
       key*: TKey
       keyModifier*: TKeyModifier
-      up*: bool
     of eventLostFocus, eventGetFocus: 
       view*: pointer
     of eventTick: nil

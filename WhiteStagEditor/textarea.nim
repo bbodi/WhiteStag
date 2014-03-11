@@ -16,6 +16,7 @@ type
     text*: string
     cursorPos: int
     showCursor: bool
+    selectRegionStart: int
     
 
 method writeData*(self: PTextArea, stream: PStream) = 
@@ -57,18 +58,34 @@ proc removeChar(self: var string, cursorPos: int) =
 proc insertChar(self: var string, ch: char, cursorPos: var int) =
   self.insertChar(runeAt($ch, 0), cursorPos)
 
+proc handleCursorMoving*(self:PTextArea, event: PEvent) =
+  let shiftJustPressed = self.selectRegionStart == -1 and event.keyModifier.shift
+  let shiftJustReleased = self.selectRegionStart != -1 and not event.keyModifier.shift
+
+  if shiftJustPressed:
+    self.selectRegionStart = self.cursorPos
+  elif shiftJustReleased:
+    let goingForward = self.cursorPos > self.selectRegionStart
+    let goingBackward = self.cursorPos < self.selectRegionStart
+    if event.key == TKey.KeyArrowLeft and goingForward:
+      self.cursorPos = self.selectRegionStart
+    elif event.key == TKey.KeyArrowRight and goingBackward:
+      self.cursorPos = self.selectRegionStart
+    self.selectRegionStart = -1
+
+  if event.key == TKey.KeyArrowLeft and self.cursorPos > 0 and not shiftJustReleased:
+    dec self.cursorPos
+  elif event.key == TKey.KeyArrowRight and self.cursorPos < self.text.runeLen and not shiftJustReleased:
+    inc self.cursorPos
+
 proc handleKey*(self: PTextArea, event: PEvent) =
   case event.key:  
   of TKey.KeyNormal:
     self.text.insertChar(event.unicode, self.cursorPos)
   of TKey.KeySpace:
     self.text.insertChar(' ', self.cursorPos)
-  of TKey.KeyArrowLeft:
-    if self.cursorPos > 0:
-      dec self.cursorPos
-  of TKey.KeyArrowRight:
-    if self.cursorPos < self.text.runeLen:
-      inc self.cursorPos
+  of TKey.KeyArrowRight, TKey.KeyArrowLeft:
+    self.handleCursorMoving(event)
   of TKey.KeyBackspace:
     let pos = self.cursorPos
     if pos != 0:
@@ -107,39 +124,54 @@ method handleEvent*(self: PTextArea, event: PEvent) =
   else:
     discard
 
+type
+  TTextDrawer = object
+    xPos, yPos: int
+    startSelection, endSelection: int
+    horizontalIndex: int
+    textArea: PTextArea
+
+proc createTextDrawer(textArea: PTextArea): ref TTextDrawer =
+  result = new(TTextDrawer)
+  result.startSelection = if textArea.selectRegionStart != -1: min(textArea.selectRegionStart, textArea.cursorPos) else: -1
+  result.endSelection = if textArea.selectRegionStart != -1: max(textArea.selectRegionStart, textArea.cursorPos) else: -1
+  result.textArea = textArea
+
+proc drawChar(self: ref TTextDrawer, charToDraw: string, buff: var TDrawBuffer) =
+    buff.writeText(self.xPos, self.yPos, charToDraw, fg = TextPanelTextColor.color(self.textArea.isFocused))
+    if self.startSelection != -1 and self.horizontalIndex >= self.startSelection and self.horizontalIndex < self.endSelection:
+      buff.setCell(self.xPos, self.yPos, bg = ColorGreen)
+    if self.horizontalIndex == self.textArea.cursorPos and self.textArea.showCursor and self.textArea.isFocused:
+      buff.setCell(self.xPos, self.yPos, bg = ColorRed)
+    if self.xPos == self.textArea.w - 1:
+      self.xPos = 0
+      inc self.yPos
+    else:
+      inc self.xPos
+
+proc draw(self: ref TTextDrawer, buff: var TDrawBuffer) =
+  for ch in runes(self.textArea.text):
+    if ch == TRune(0x0009): 
+      for i in 0..3:
+        self.drawChar(" ", buff)
+    elif ch == TRune(0x000A): 
+      inc self.yPos
+      self.xPos = 0
+    else:
+      self.drawChar(ch.toUTF8, buff)
+    inc self.horizontalIndex
+  if self.horizontalIndex == self.textArea.cursorPos and self.textArea.showCursor and self.textArea.isFocused:
+      buff.setCell(self.xPos, self.yPos, bg = ColorRed)
+
 method draw*(self: PTextArea): TDrawBuffer = 
   self.buff.setCells(0, 0, self.w, self.h, ch="", bg = TextPanelColor.color(self.isFocused))
-
-  var drawX, drawY: int
-  var horizontalIndex: int
-  for ch in runes(self.text):
-    if ch == TRune(0x0009): 
-      inc drawX, 4
-      if drawX >= self.w - 1:
-        drawX = 0
-        inc drawY
-      inc horizontalIndex
-      continue
-    elif ch == TRune(0x000A): 
-      inc drawY
-      drawX = 0
-      inc horizontalIndex
-      continue
-    self.buff.writeText(drawX, drawY, ch.toUTF8, fg = TextPanelTextColor.color(self.isFocused))
-    if horizontalIndex == self.cursorPos and self.showCursor and self.isFocused:
-      self.buff.setCell(drawX, drawY, bg = ColorRed)
-    if drawX == self.w - 1:
-      drawX = 0
-      inc drawY
-    else:
-      inc drawX
-    inc horizontalIndex
-  if horizontalIndex == self.cursorPos and self.showCursor and self.isFocused:
-      self.buff.setCell(drawX, drawY, bg = ColorRed)
+  let drawer = createTextDrawer(self)
+  drawer.draw(self.buff)
   return self.buff
 
 proc createTextArea*(w, h: int): PTextArea = 
   result = new(TTextArea)
+  result.selectRegionStart = -1
   result.setWidthHeight(w, h)
   result.text = ""
 
@@ -315,6 +347,13 @@ when isMainModule:
       check buff.cell(3, 2).ch.toUTF8 == "3"
       check buff.cell(4, 2).ch.toUTF8 == "4"
 
+    proc imitateKeyPresses(textArea: PTextArea, input: string) =
+      for i, ch in input:
+        if ch == '\t':
+          textArea.handleEvent(PEvent(kind: TEventKind.eventKey, key: TKey.KeyTab))
+        else:
+          textArea.handleEvent(PEvent(kind: TEventKind.eventKey, key: TKey.KeyNormal, unicode: runeAt(input, i))) 
+
     test "drawing newLines":
       textArea.showCursor = true
       textArea.handleEvent(PEvent(kind: TEventKind.eventKey, key: TKey.KeyNormal, unicode: runeAt("0", 0)))
@@ -340,66 +379,153 @@ when isMainModule:
 
     test "drawing tab":
       textArea.showCursor = true
-      textArea.handleEvent(PEvent(kind: TEventKind.eventKey, key: TKey.KeyNormal, unicode: runeAt("0", 0)))
-      textArea.handleEvent(PEvent(kind: TEventKind.eventKey, key: TKey.KeyNormal, unicode: runeAt("1", 0)))
-      textArea.handleEvent(PEvent(kind: TEventKind.eventKey, key: TKey.KeyTab))
-      textArea.handleEvent(PEvent(kind: TEventKind.eventKey, key: TKey.KeyNormal, unicode: runeAt("2", 0)))
-      textArea.handleEvent(PEvent(kind: TEventKind.eventKey, key: TKey.KeyNormal, unicode: runeAt("3", 0)))
+      textArea.imitateKeyPresses("01\t23")
       let buff = textArea.draw()
       check buff.cell(0, 0).ch.toUTF8 == "0"
       check buff.cell(1, 0).ch.toUTF8 == "1"
+      check buff.cell(2, 0).ch.toUTF8 == " "
+      check buff.cell(3, 0).ch.toUTF8 == " "
+      check buff.cell(4, 0).ch.toUTF8 == " "
 
-      check buff.cell(0, 1).ch.toUTF8 == "2"
-      check buff.cell(1, 1).ch.toUTF8 == "3"
+      check buff.cell(0, 1).ch.toUTF8 == " "
+      check buff.cell(1, 1).ch.toUTF8 == "2"
+      check buff.cell(2, 1).ch.toUTF8 == "3"
 
       #cursor
-      check buff.cell(2, 1).bg == ColorRed
-
+      check buff.cell(3, 1).bg == ColorRed
+  
     test "selecting forward":
-      textArea.showCursor = true
-      textArea.handleEvent(PEvent(kind: TEventKind.eventKey, key: TKey.KeyNormal, unicode: runeAt("0", 0)))
-      textArea.handleEvent(PEvent(kind: TEventKind.eventKey, key: TKey.KeyNormal, unicode: runeAt("1", 0)))
-      textArea.handleEvent(PEvent(kind: TEventKind.eventKey, key: TKey.KeyNormal, unicode: runeAt("2", 0)))
-      textArea.handleEvent(PEvent(kind: TEventKind.eventKey, key: TKey.KeyNormal, unicode: runeAt("3", 0)))
-      textArea.handleEvent(PEvent(kind: TEventKind.eventKey, key: TKey.KeyNormal, unicode: runeAt("4", 0)))
-      textArea.handleEvent(PEvent(kind: TEventKind.eventKey, key: TKey.KeyTab))
-      textArea.handleEvent(PEvent(kind: TEventKind.eventKey, key: TKey.KeyNormal, unicode: runeAt("4", 0)))
-      textArea.handleEvent(PEvent(kind: TEventKind.eventKey, key: TKey.KeyNormal, unicode: runeAt("5", 0)))
+      textArea.imitateKeyPresses("01234\t56")
       textArea.cursorPos = 0
 
-      textArea.handleEvent(PEvent(kind: TEventKind.eventKey, key: TKey.KeyArrowLeft, keyModifier: TKeyModifier(shift : true)))
+      textArea.handleEvent(PEvent(kind: TEventKind.eventKey, key: TKey.KeyArrowRight, keyModifier: TKeyModifier(shift : true)))
       check textArea.selectRegionStart == 0
-      check textArea.selectRegionEnd == 1
+      check textArea.cursorPos == 1
 
-      textArea.handleEvent(PEvent(kind: TEventKind.eventKey, key: TKey.KeyArrowLeft, keyModifier: TKeyModifier(shift : true)))
+      textArea.handleEvent(PEvent(kind: TEventKind.eventKey, key: TKey.KeyArrowRight, keyModifier: TKeyModifier(shift : true)))
       check textArea.selectRegionStart == 0
-      check textArea.selectRegionEnd == 2
+      check textArea.cursorPos == 2
 
-      textArea.handleEvent(PEvent(kind: TEventKind.eventKey, key: TKey.KeyArrowLeft, keyModifier: TKeyModifier(shift : true)))
+      textArea.handleEvent(PEvent(kind: TEventKind.eventKey, key: TKey.KeyArrowRight, keyModifier: TKeyModifier(shift : true)))
       check textArea.selectRegionStart == 0
-      check textArea.selectRegionEnd == 3
+      check textArea.cursorPos == 3
 
-    test "selecting forward then deselect":
-      textArea.showCursor = true
-      textArea.handleEvent(PEvent(kind: TEventKind.eventKey, key: TKey.KeyNormal, unicode: runeAt("0", 0)))
-      textArea.handleEvent(PEvent(kind: TEventKind.eventKey, key: TKey.KeyNormal, unicode: runeAt("1", 0)))
-      textArea.handleEvent(PEvent(kind: TEventKind.eventKey, key: TKey.KeyNormal, unicode: runeAt("2", 0)))
-      textArea.handleEvent(PEvent(kind: TEventKind.eventKey, key: TKey.KeyNormal, unicode: runeAt("3", 0)))
-      textArea.handleEvent(PEvent(kind: TEventKind.eventKey, key: TKey.KeyNormal, unicode: runeAt("4", 0)))
-      textArea.handleEvent(PEvent(kind: TEventKind.eventKey, key: TKey.KeyTab))
-      textArea.handleEvent(PEvent(kind: TEventKind.eventKey, key: TKey.KeyNormal, unicode: runeAt("4", 0)))
-      textArea.handleEvent(PEvent(kind: TEventKind.eventKey, key: TKey.KeyNormal, unicode: runeAt("5", 0)))
+    test "selecting forward then deselect by right without shift":
+      textArea.imitateKeyPresses("01234\t56")
       textArea.cursorPos = 0
 
-      textArea.handleEvent(PEvent(kind: TEventKind.eventKey, key: TKey.KeyArrowLeft, keyModifier: TKeyModifier(shift : true)))
-      textArea.handleEvent(PEvent(kind: TEventKind.eventKey, key: TKey.KeyArrowLeft, keyModifier: TKeyModifier(shift : true)))
-      textArea.handleEvent(PEvent(kind: TEventKind.eventKey, key: TKey.KeyArrowLeft, keyModifier: TKeyModifier(shift : true)))
+      check textArea.selectRegionStart == -1
+      textArea.handleEvent(PEvent(kind: TEventKind.eventKey, key: TKey.KeyArrowRight, keyModifier: TKeyModifier(shift : true)))
+      textArea.handleEvent(PEvent(kind: TEventKind.eventKey, key: TKey.KeyArrowRight, keyModifier: TKeyModifier(shift : true)))
+      textArea.handleEvent(PEvent(kind: TEventKind.eventKey, key: TKey.KeyArrowRight, keyModifier: TKeyModifier(shift : true)))
       check textArea.selectRegionStart == 0
-      check textArea.selectRegionEnd == 3
-      textArea.handleEvent(PEvent(kind: TEventKind.eventKey, key: TKey.KeyShift, up: true)
+      check textArea.cursorPos == 3
+      textArea.handleEvent(PEvent(kind: TEventKind.eventKey, key: TKey.KeyArrowRight))
+      check textArea.selectRegionStart == -1
+      check textArea.cursorPos == 3
 
-      #cursor
-      check buff.cell(2, 2).bg == ColorRed
+    test "if selection is ended by left key, the cursor must jump to the start of the selection":
+      textArea.imitateKeyPresses("01234\t56")
+      textArea.cursorPos = 0
+
+      check textArea.selectRegionStart == -1
+      textArea.handleEvent(PEvent(kind: TEventKind.eventKey, key: TKey.KeyArrowRight, keyModifier: TKeyModifier(shift : true)))
+      textArea.handleEvent(PEvent(kind: TEventKind.eventKey, key: TKey.KeyArrowRight, keyModifier: TKeyModifier(shift : true)))
+      textArea.handleEvent(PEvent(kind: TEventKind.eventKey, key: TKey.KeyArrowRight, keyModifier: TKeyModifier(shift : true)))
+      check textArea.selectRegionStart == 0
+      check textArea.cursorPos == 3
+      textArea.handleEvent(PEvent(kind: TEventKind.eventKey, key: TKey.KeyArrowLeft))
+      check textArea.selectRegionStart == -1
+      check textArea.cursorPos == 0
+
+    test "selecting backward":
+      textArea.imitateKeyPresses("01234\t56")
+
+      check textArea.cursorPos == 8
+      textArea.handleEvent(PEvent(kind: TEventKind.eventKey, key: TKey.KeyArrowLeft, keyModifier: TKeyModifier(shift : true)))
+      check textArea.selectRegionStart == 8
+      check textArea.cursorPos == 7
+
+      textArea.handleEvent(PEvent(kind: TEventKind.eventKey, key: TKey.KeyArrowLeft, keyModifier: TKeyModifier(shift : true)))
+      check textArea.selectRegionStart == 8
+      check textArea.cursorPos == 6
+
+      textArea.handleEvent(PEvent(kind: TEventKind.eventKey, key: TKey.KeyArrowLeft, keyModifier: TKeyModifier(shift : true)))
+      check textArea.selectRegionStart == 8
+      check textArea.cursorPos == 5
+
+    test "selecting backward then deselect by left without shift":
+      textArea.imitateKeyPresses("01234\t56")
+
+      check textArea.selectRegionStart == -1
+      textArea.handleEvent(PEvent(kind: TEventKind.eventKey, key: TKey.KeyArrowLeft, keyModifier: TKeyModifier(shift : true)))
+      textArea.handleEvent(PEvent(kind: TEventKind.eventKey, key: TKey.KeyArrowLeft, keyModifier: TKeyModifier(shift : true)))
+      textArea.handleEvent(PEvent(kind: TEventKind.eventKey, key: TKey.KeyArrowLeft, keyModifier: TKeyModifier(shift : true)))
+      check textArea.selectRegionStart == 8
+      check textArea.cursorPos == 5
+      textArea.handleEvent(PEvent(kind: TEventKind.eventKey, key: TKey.KeyArrowLeft))
+      check textArea.selectRegionStart == -1
+      check textArea.cursorPos == 5
+
+    test "if selection is ended by right key, the cursor must jump to the start of the selection (which is the right side of the selction)":
+      textArea.imitateKeyPresses("01234\t56")
+
+      check textArea.selectRegionStart == -1
+      textArea.handleEvent(PEvent(kind: TEventKind.eventKey, key: TKey.KeyArrowLeft, keyModifier: TKeyModifier(shift : true)))
+      textArea.handleEvent(PEvent(kind: TEventKind.eventKey, key: TKey.KeyArrowLeft, keyModifier: TKeyModifier(shift : true)))
+      textArea.handleEvent(PEvent(kind: TEventKind.eventKey, key: TKey.KeyArrowLeft, keyModifier: TKeyModifier(shift : true)))
+      check textArea.selectRegionStart == 8
+      check textArea.cursorPos == 5
+      textArea.handleEvent(PEvent(kind: TEventKind.eventKey, key: TKey.KeyArrowRight))
+      check textArea.selectRegionStart == -1
+      check textArea.cursorPos == 8
+
+    test "selected range are highlighted":
+      textArea.imitateKeyPresses("01234\t56")
+      textArea.cursorPos = 0
+
+      textArea.handleEvent(PEvent(kind: TEventKind.eventKey, key: TKey.KeyArrowRight))
+      textArea.handleEvent(PEvent(kind: TEventKind.eventKey, key: TKey.KeyArrowRight, keyModifier: TKeyModifier(shift : true)))
+      textArea.handleEvent(PEvent(kind: TEventKind.eventKey, key: TKey.KeyArrowRight, keyModifier: TKeyModifier(shift : true)))
+      textArea.handleEvent(PEvent(kind: TEventKind.eventKey, key: TKey.KeyArrowRight, keyModifier: TKeyModifier(shift : true)))
+
+      let buff = textArea.draw()
+      check buff.cell(0, 0).ch.toUTF8 == "0"
+      let defaultColor = buff.cell(0, 0).bg
+
+      check buff.cell(1, 0).ch.toUTF8 == "1"
+      check buff.cell(1, 0).bg != defaultColor
+      check buff.cell(2, 0).ch.toUTF8 == "2"
+      check buff.cell(2, 0).bg != defaultColor
+      check buff.cell(3, 0).ch.toUTF8 == "3"
+      check buff.cell(3, 0).bg != defaultColor
+
+      check buff.cell(4, 0).ch.toUTF8 == "4"
+      check buff.cell(4, 0).bg == defaultColor
+
+    test "selected tabs are highlighted":
+      textArea.imitateKeyPresses("01\t2")
+      textArea.cursorPos = 0
+
+      textArea.handleEvent(PEvent(kind: TEventKind.eventKey, key: TKey.KeyArrowRight))
+      textArea.handleEvent(PEvent(kind: TEventKind.eventKey, key: TKey.KeyArrowRight, keyModifier: TKeyModifier(shift : true)))
+      textArea.handleEvent(PEvent(kind: TEventKind.eventKey, key: TKey.KeyArrowRight, keyModifier: TKeyModifier(shift : true)))
+      textArea.handleEvent(PEvent(kind: TEventKind.eventKey, key: TKey.KeyArrowRight, keyModifier: TKeyModifier(shift : true)))
+
+      let buff = textArea.draw()
+      check buff.cell(0, 0).ch.toUTF8 == "0"
+      let defaultColor = buff.cell(0, 0).bg
+
+      check buff.cell(1, 0).ch.toUTF8 == "1"
+      check buff.cell(1, 0).bg != defaultColor
+      check buff.cell(2, 0).ch.toUTF8 == " "
+      check buff.cell(2, 0).bg != defaultColor
+      check buff.cell(3, 0).ch.toUTF8 == " "
+      check buff.cell(3, 0).bg != defaultColor
+      check buff.cell(4, 0).ch.toUTF8 == " "
+      check buff.cell(4, 0).bg != defaultColor
+      check buff.cell(5, 0).ch.toUTF8 == " "
+      check buff.cell(5, 0).bg != defaultColor
 
 
     type 
