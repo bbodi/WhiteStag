@@ -13,11 +13,37 @@ import rect
 type
   PTextArea* = ref TTextArea
   TTextArea* = object of TView
-    text*: string
+    lines: seq[string]
     cursorPos: TPoint
     showCursor: bool
     selectRegionStart: TPoint
-    
+
+proc updateText(self: PTextArea, text: string) =
+  self.lines = @[]
+  var currentLineText = ""
+  var i = 0
+  var ch: TRune
+  while i < text.len:
+    fastRuneAt(text, i, ch, true)
+
+    if ch == TRune(0x000D):
+      fastRuneAt(text, i, ch, true)
+      doAssert(ch == TRune(0x000A))
+      self.lines.add(currentLineText)
+      currentLineText = ""
+    else:
+      currentLineText &= ch.toUTF8
+  self.lines.add(currentLineText)
+
+proc `text=`*(self: PTextArea, txt: string) =
+  self.updateText(txt)
+
+proc `text`*(self: PTextArea): string =
+  result = ""
+  for i, line in self.lines:
+    if i != 0:
+      result &= "\n"
+    result &= line
 
 method writeData*(self: PTextArea, stream: PStream) = 
   let copy = self.text
@@ -40,6 +66,9 @@ proc insertChar(self: var string, ch: TRune, cursorPos: var int) =
     self = self[0..runePos-1] & $ch & self[runePos..high(self)]
   inc cursorPos
 
+proc insertCharAtCursor(self: PTextArea, ch: TRune) =
+  self.lines[self.cursorPos.y].insertChar(ch, self.cursorPos.x)
+
 proc removeChar(self: var string, cursorPos: int) =
   var startRunePos = 0
   if cursorPos > 0:
@@ -59,6 +88,8 @@ proc insertChar(self: var string, ch: char, cursorPos: var int) =
   self.insertChar(runeAt($ch, 0), cursorPos)
 
 proc handleCursorMoving*(self:PTextArea, event: PEvent) =
+  let currentLineText = self.lines[self.cursorPos.y]
+
   var goingBackward, goingForward: bool
   case event.key:  
   of TKey.KeyHome, TKey.KeyArrowLeft:
@@ -84,12 +115,12 @@ proc handleCursorMoving*(self:PTextArea, event: PEvent) =
 
   if event.key == TKey.KeyArrowLeft and self.cursorPos.x > 0 and not shiftJustReleased:
     dec self.cursorPos.x
-  elif event.key == TKey.KeyArrowRight and self.cursorPos.x < self.text.runeLen and not shiftJustReleased:
+  elif event.key == TKey.KeyArrowRight and self.cursorPos.x < currentLineText.runeLen and not shiftJustReleased:
     inc self.cursorPos.x
   elif event.key == TKey.KeyHome:
     self.cursorPos.x = 0
   elif event.key == TKey.KeyEnd:
-    self.cursorPos.x = self.text.runeLen
+    self.cursorPos.x = currentLineText.runeLen
 
   if self.cursorPos == self.selectRegionStart:
     self.selectRegionStart = (-1, -1)
@@ -97,24 +128,40 @@ proc handleCursorMoving*(self:PTextArea, event: PEvent) =
 proc handleKey*(self: PTextArea, event: PEvent) =
   case event.key:  
   of TKey.KeyNormal:
-    self.text.insertChar(event.unicode, self.cursorPos.x)
+    self.insertCharAtCursor(event.unicode)
   of TKey.KeySpace:
-    self.text.insertChar(' ', self.cursorPos.x)
+    self.insertCharAtCursor(TRune(0x0020))
   of TKey.KeyArrowRight, TKey.KeyArrowLeft, TKey.KeyHome, TKey.KeyEnd:
     self.handleCursorMoving(event)
   of TKey.KeyBackspace:
     let pos = self.cursorPos
     if pos.x != 0:
-      removeChar(self.text, self.cursorPos.x-1)
+      self.lines[self.cursorPos.y].removeChar(self.cursorPos.x-1)
       dec self.cursorPos.x
   of TKey.KeyDelete:
-    removeChar(self.text, self.cursorPos.x)
-    if self.cursorPos.x >= self.text.runeLen:
-      self.cursorPos.x = self.text.runeLen-1
+    self.lines[self.cursorPos.y].removeChar(self.cursorPos.x)
+    if self.cursorPos.x >= self.lines[self.cursorPos.y].runeLen:
+      self.cursorPos.x = self.lines[self.cursorPos.y].runeLen-1
   of TKey.KeyEnter:
-    self.text.insertChar(TRune(0x000A), self.cursorPos.x)
+    let index = self.cursorPos.y
+    let pos = self.cursorPos.x
+    let line = self.lines[index]
+    self.lines.insert("", index+1)
+    self.lines[index] = ""
+    var 
+      i, charCount: int
+      ch,: TRune
+    while i < line.len:
+      fastRuneAt(line, i, ch, true)
+      if charCount < pos:
+        self.lines[index] &= ch.toUTF8
+      else:
+        self.lines[index+1] &= ch.toUTF8
+      inc charCount
+    inc self.cursorPos.y
+    self.cursorPos.x = 0
   of TKey.KeyTab:
-    self.text.insertChar(TRune(0x0009), self.cursorPos.x)
+    self.insertCharAtCursor(TRune(0x0009))
   else:
     return
   self.modified()
@@ -128,8 +175,9 @@ method handleEvent*(self: PTextArea, event: PEvent) =
   of TEventKind.eventMouseButtonDown:
     if not event.local:
       return
+    var currentLineText = self.lines[self.cursorPos.y]
     let pos = event.localMouseY * self.w + event.localMouseX
-    self.cursorPos.x = if pos > self.text.runeLen: self.text.runeLen else: pos
+    self.cursorPos.x = if pos > currentLineText.runeLen: currentLineText.runeLen else: pos
     
   of TEventKind.eventKey:
     if self.isFocused:
@@ -154,30 +202,32 @@ proc createTextDrawer(textArea: PTextArea): ref TTextDrawer =
   result.textArea = textArea
 
 proc drawChar(self: ref TTextDrawer, charToDraw: string, buff: var TDrawBuffer) =
-    buff.writeText(self.xPos, self.yPos, charToDraw, fg = TextPanelTextColor.color(self.textArea.isFocused))
-    if self.startSelection.x != -1 and self.horizontalIndex >= self.startSelection.x and self.horizontalIndex < self.endSelection.x:
-      buff.setCell(self.xPos, self.yPos, bg = ColorGreen)
-    if self.horizontalIndex == self.textArea.cursorPos.x and self.textArea.showCursor and self.textArea.isFocused:
-      buff.setCell(self.xPos, self.yPos, bg = ColorRed)
-    if self.xPos == self.textArea.w - 1:
-      self.xPos = 0
-      inc self.yPos
-    else:
-      inc self.xPos
+  buff.writeText(self.xPos, self.yPos, charToDraw, fg = TextPanelTextColor.color(self.textArea.isFocused))
+  if self.startSelection.x != -1 and self.horizontalIndex >= self.startSelection.x and self.horizontalIndex < self.endSelection.x:
+    buff.setCell(self.xPos, self.yPos, bg = ColorGreen)
+  let isCurrentRow = self.yPos == self.textArea.cursorPos.y
+  let isCurrentColumn = self.horizontalIndex == self.textArea.cursorPos.x
+  if isCurrentRow and isCurrentColumn and self.textArea.showCursor and self.textArea.isFocused:
+    buff.setCell(self.xPos, self.yPos, bg = ColorRed)
+  inc self.xPos
 
 proc draw(self: ref TTextDrawer, buff: var TDrawBuffer) =
-  for ch in runes(self.textArea.text):
-    if ch == TRune(0x0009): 
-      for i in 0..3:
-        self.drawChar(" ", buff)
-    elif ch == TRune(0x000A): 
-      inc self.yPos
-      self.xPos = 0
-    else:
-      self.drawChar(ch.toUTF8, buff)
-    inc self.horizontalIndex
+  self.yPos = -1
+  for line in self.textArea.lines:
+    inc self.yPos
+    self.xPos = 0
+    self.horizontalIndex = 0
+    for ch in runes(line):
+      if ch == TRune(0x0009): 
+        for i in 0..3:
+          self.drawChar(" ", buff)
+      else:
+        self.drawChar(ch.toUTF8, buff)
+      inc self.horizontalIndex
+
   if self.horizontalIndex == self.textArea.cursorPos.x and self.textArea.showCursor and self.textArea.isFocused:
-      buff.setCell(self.xPos, self.yPos, bg = ColorRed)
+    buff.setCell(self.xPos, self.yPos, bg = ColorRed)
+    
 
 method draw*(self: PTextArea): TDrawBuffer = 
   self.buff.setCells(0, 0, self.w, self.h, ch="", bg = TextPanelColor.color(self.isFocused))
@@ -198,7 +248,7 @@ when isMainModule:
   suite "TextField Test Suite":
     setup:
       let parent = PTestView()
-      let textArea: PTextArea = createTextArea(5, 5)
+      let textArea: PTextArea = createTextArea(10, 5)
       parent.addView(textArea, 0, 0)
       textArea.setFocused()
       
@@ -207,12 +257,31 @@ when isMainModule:
       check "TextArea" == view.name
       discard view.draw()
 
+    test "setting text with newlines":
+      textArea.text = "a\nb\nc"
+      check textArea.lines.len == 3
+      check textArea.lines[0] == "a"
+      check textArea.lines[1] == "b"
+      check textArea.lines[2] == "c"
+
+    test "setting long text: line wrapping occurs at drawing, long lines are saved in one line also!":
+      textArea.text = "012340123401234"
+      check textArea.lines.len == 1
+      check textArea.lines[0] == "012340123401234"
+
+    test "setting UTF8 text":
+      textArea.text = "áéőúóáéőúóáéőúó"
+      check textArea.lines.len == 1
+      check textArea.lines[0] == "áéőúóáéőúóáéőúó"
+
     test "backspace":
       textArea.text = "tést"
       textArea.cursorPos.x = 1
+      check textArea.cursorPos.y == 0
       textArea.handleEvent(PEvent(kind: TEventKind.eventKey, key: TKey.KeyBackspace))
       check textArea.text == "ést"
       check textArea.cursorPos.x == 0
+      check textArea.cursorPos.y == 0
 
     test "backspace 2":
       textArea.text = "tést"
@@ -320,9 +389,14 @@ when isMainModule:
     test "insert newline":
       textArea.text = "áá"
       textArea.cursorPos.x = 1
+      check textArea.cursorPos.y == 0
       textArea.handleEvent(PEvent(kind: TEventKind.eventKey, key: TKey.KeyEnter))
-      check textArea.text == "á" & $TRune(10) & "á"
-      check textArea.cursorPos.x == 2
+      check textArea.text == "á\ná"
+      check textArea.cursorPos.x == 0
+      check textArea.cursorPos.y == 1
+      check textArea.lines.len == 2
+      check textArea.lines[0] == "á"
+      check textArea.lines[1] == "á"
 
     test "insert tab":
       textArea.text = "áá"
@@ -337,51 +411,37 @@ when isMainModule:
       check buff.cell(0, 0).ch.toUTF8 == "á"
       check buff.cell(1, 0).ch.toUTF8 == "á"
 
-    test "drawing chars in the first two rows":
-      textArea.text = "0123456789"
+    test "drawing long text: there is no line wrapping!":
+      textArea.text = "01234567890123456789"
       let buff = textArea.draw()
       check buff.cell(0, 0).ch.toUTF8 == "0"
       check buff.cell(1, 0).ch.toUTF8 == "1"
       check buff.cell(2, 0).ch.toUTF8 == "2"
       check buff.cell(3, 0).ch.toUTF8 == "3"
       check buff.cell(4, 0).ch.toUTF8 == "4"
+      check buff.cell(5, 0).ch.toUTF8 == "5"
+      check buff.cell(6, 0).ch.toUTF8 == "6"
+      check buff.cell(7, 0).ch.toUTF8 == "7"
+      check buff.cell(8, 0).ch.toUTF8 == "8"
+      check buff.cell(9, 0).ch.toUTF8 == "9"
 
-      check buff.cell(0, 1).ch.toUTF8 == "5"
-      check buff.cell(1, 1).ch.toUTF8 == "6"
-      check buff.cell(2, 1).ch.toUTF8 == "7"
-      check buff.cell(3, 1).ch.toUTF8 == "8"
-      check buff.cell(4, 1).ch.toUTF8 == "9"
-
-    test "drawing chars in the first three rows":
-      textArea.text = "012345678901234"
-      let buff = textArea.draw()
-      check buff.cell(0, 0).ch.toUTF8 == "0"
-      check buff.cell(1, 0).ch.toUTF8 == "1"
-      check buff.cell(2, 0).ch.toUTF8 == "2"
-      check buff.cell(3, 0).ch.toUTF8 == "3"
-      check buff.cell(4, 0).ch.toUTF8 == "4"
-
-      check buff.cell(0, 1).ch.toUTF8 == "5"
-      check buff.cell(1, 1).ch.toUTF8 == "6"
-      check buff.cell(2, 1).ch.toUTF8 == "7"
-      check buff.cell(3, 1).ch.toUTF8 == "8"
-      check buff.cell(4, 1).ch.toUTF8 == "9"
-
-      check buff.cell(0, 2).ch.toUTF8 == "0"
-      check buff.cell(1, 2).ch.toUTF8 == "1"
-      check buff.cell(2, 2).ch.toUTF8 == "2"
-      check buff.cell(3, 2).ch.toUTF8 == "3"
-      check buff.cell(4, 2).ch.toUTF8 == "4"
+      check buff.cell(10, 0).ch == TRune(0)
+      check buff.cell(0, 1).ch == TRune(0)
+      check buff.cell(1, 1).ch == TRune(0)
 
     proc imitateKeyPresses(textArea: PTextArea, input: string) =
       for i, ch in input:
         if ch == '\t':
           textArea.handleEvent(PEvent(kind: TEventKind.eventKey, key: TKey.KeyTab))
+        elif ch == '!':
+          textArea.handleEvent(PEvent(kind: TEventKind.eventKey, key: TKey.KeyEnter))
+        elif ch == ' ':
+          textArea.handleEvent(PEvent(kind: TEventKind.eventKey, key: TKey.KeySpace))
         else:
           textArea.handleEvent(PEvent(kind: TEventKind.eventKey, key: TKey.KeyNormal, unicode: runeAt(input, i))) 
 
-    test "drawing newLines":
-      textArea.showCursor = true
+
+    test "pressing enter":
       textArea.handleEvent(PEvent(kind: TEventKind.eventKey, key: TKey.KeyNormal, unicode: runeAt("0", 0)))
       textArea.handleEvent(PEvent(kind: TEventKind.eventKey, key: TKey.KeyNormal, unicode: runeAt("1", 0)))
       textArea.handleEvent(PEvent(kind: TEventKind.eventKey, key: TKey.KeyEnter))
@@ -390,6 +450,15 @@ when isMainModule:
       textArea.handleEvent(PEvent(kind: TEventKind.eventKey, key: TKey.KeyEnter))
       textArea.handleEvent(PEvent(kind: TEventKind.eventKey, key: TKey.KeyNormal, unicode: runeAt("4", 0)))
       textArea.handleEvent(PEvent(kind: TEventKind.eventKey, key: TKey.KeyNormal, unicode: runeAt("5", 0)))
+      check textArea.lines.len == 3
+      check textArea.lines[0] == "01"
+      check textArea.lines[1] == "23"
+      check textArea.lines[2] == "45"
+      check textArea.text == "01\n23\n45"
+
+    test "drawing newLines":
+      textArea.showCursor = true
+      textArea.imitateKeyPresses("01!23!45")
       let buff = textArea.draw()
       check buff.cell(0, 0).ch.toUTF8 == "0"
       check buff.cell(1, 0).ch.toUTF8 == "1"
@@ -403,22 +472,42 @@ when isMainModule:
       #cursor
       check buff.cell(2, 2).bg == ColorRed
 
+    test "drawing cursor on a multirow text. The cursor can be highlighted only in the current row and column!":
+      textArea.showCursor = true
+      textArea.imitateKeyPresses("02!23!45")
+      textArea.cursorPos.x = 1
+      check textArea.cursorPos.y == 2
+      let buff = textArea.draw()
+      check buff.cell(0, 0).bg == ColorBlue
+      check buff.cell(1, 0).bg == ColorBlue
+      check buff.cell(0, 1).bg == ColorBlue
+      check buff.cell(1, 1).bg == ColorBlue
+      check buff.cell(0, 2).bg == ColorBlue
+      check buff.cell(1, 2).bg == ColorRed
+
+    
+
+    test "pressing space":
+      textArea.imitateKeyPresses("0 1  2   3")
+      check textArea.cursorPos.x == "0 1  2   3".len
+      check textArea.text == "0 1  2   3"
+      check textArea.lines[0] == "0 1  2   3"
+
     test "drawing tab":
       textArea.showCursor = true
-      textArea.imitateKeyPresses("01\t23")
+      textArea.imitateKeyPresses("0\t123")
       let buff = textArea.draw()
       check buff.cell(0, 0).ch.toUTF8 == "0"
-      check buff.cell(1, 0).ch.toUTF8 == "1"
+      check buff.cell(1, 0).ch.toUTF8 == " "
       check buff.cell(2, 0).ch.toUTF8 == " "
       check buff.cell(3, 0).ch.toUTF8 == " "
       check buff.cell(4, 0).ch.toUTF8 == " "
-
-      check buff.cell(0, 1).ch.toUTF8 == " "
-      check buff.cell(1, 1).ch.toUTF8 == "2"
-      check buff.cell(2, 1).ch.toUTF8 == "3"
+      check buff.cell(5, 0).ch.toUTF8 == "1"
+      check buff.cell(6, 0).ch.toUTF8 == "2"
+      check buff.cell(7, 0).ch.toUTF8 == "3"
 
       #cursor
-      check buff.cell(3, 1).bg == ColorRed
+      check buff.cell(8, 0).bg == ColorRed
   
     test "selecting forward":
       textArea.imitateKeyPresses("01234\t56")
@@ -612,18 +701,19 @@ when isMainModule:
       check textArea.cursorPos.x == 8
 
     test "Pressing Home in the second row":
-      textArea.imitateKeyPresses("01234567")
+      textArea.imitateKeyPresses("01234!56789")
       
-      check textArea.cursorPos == (2, 1)
+      check textArea.cursorPos == (5, 1)
       textArea.handleEvent(PEvent(kind: TEventKind.eventKey, key: TKey.KeyHome))
       check textArea.cursorPos == (0, 1)
 
     test "Pressing End in the second row":
-      textArea.imitateKeyPresses("01234567")
+      textArea.imitateKeyPresses("01234!56789")
       
-      check textArea.cursorPos == (2, 1)
+      check textArea.cursorPos == (5, 1)
+      textArea.cursorPos.x = 0
       textArea.handleEvent(PEvent(kind: TEventKind.eventKey, key: TKey.KeyEnd))
-      check textArea.cursorPos == (4, 1)
+      check textArea.cursorPos == (5, 1)
 
     type 
       TTestData = object
