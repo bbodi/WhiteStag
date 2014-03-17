@@ -78,6 +78,7 @@ type
       mouseButton*: TMouseButton
       local*: bool
       localMouseX*, localMouseY*: int
+      doubleClick*: bool
     of eventKey, eventKeyRepeat, eventKeyUp:
       ch*: char
       unicode*: TRune

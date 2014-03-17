@@ -576,6 +576,12 @@ method draw*(self: PTestView): TDrawBuffer = discard
 proc startRecordingEvents*(self: PTestView) = self.recordingEvents = true
 proc stopRecordingEvents*(self: PTestView) = self.recordingEvents = false
 
+proc newLocalMouseDownEvent*(x, y: int): PEvent =
+  PEvent(kind: TEventKind.eventMouseButtonDown, localMouseX: x, localMouseY: y, local: true)
+
+proc newDoubleClickEvent*(x, y: int): PEvent =
+  PEvent(kind: TEventKind.eventMouseButtonDown, localMouseX: x, localMouseY: y, local: true, doubleClick: true)
+
 when isMainModule:
   import unittest
 

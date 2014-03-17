@@ -34,6 +34,7 @@ type
     w, h: int
     sdlEvent: sdl.TEvent
     nextTickTime: uint32
+    lastMouseButtonDownTimeStamp: int32
     font12*: TFont
     font14*: TFont
     font16*: TFont
@@ -381,6 +382,9 @@ proc processSdlEvent(self: PSdlEngine, sdlEvent: sdl.PEvent): event.PEvent =
     result.mouseX = TPixel(t.x)
     result.mouseY = TPixel(t.y)
     result.mouseButton = readMouseButton(t)
+    let now = sdl.getTicks()
+    result.doubleClick = int(now - self.lastMouseButtonDownTimeStamp) < 500
+    self.lastMouseButtonDownTimeStamp = now
   of sdl.MOUSEBUTTONUP:
     let t = EvMouseButton(sdlEvent)
     result = event.PEvent(kind: eventMouseButtonUp)
