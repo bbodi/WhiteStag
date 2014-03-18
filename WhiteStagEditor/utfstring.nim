@@ -64,11 +64,14 @@ proc `&=`*(self: var string, utfstr: UTFString) =
 proc insert*(self: var UTFString, ch: TRune, index: int) =
   self.chars.insert(ch, index)
 
-proc add*(self: var UTFString, ch: TRune) =
+proc append*(self: var UTFString, ch: TRune) =
   self.chars.add(ch)
 
 proc remove*(self: var UTFString, index: int) =
   self.chars.delete(index)
+
+proc `$`*(self: UTFString): string =
+  self.strFromRunes()
 
 when isMainModule:
   import unittest
@@ -80,6 +83,7 @@ when isMainModule:
     test "UTF character handling":
       let str = initString("éáőúűóü")
       check str.len == 7
+      check str.chars.len == 7
 
     test "modifying character":
       var str = initString("éáőúűóü")

@@ -32,7 +32,7 @@ proc findFirstWhiteSpace(str: UTFString, runePos: int): int =
 proc findLastWhiteSpace(str: UTFString, runePos: int): int =
   var pos = runePos
   var lastPos = pos
-  while pos < str.len:
+  while pos < str.len-1:
     if str.runeAt(pos).isWhiteSpace:
       return lastPos
     lastPos = pos
@@ -76,18 +76,9 @@ method readData*(self: PTextArea, stream: PStream) =
 proc handleMouse(self: PTextArea, event: PEvent) =
   discard
 
-proc insertChar(self: var string, ch: TRune, cursorPos: var int) =
-  if cursorPos == 0:
-    self = $ch & self
-  else:
-    var runePos = 0
-    for i in 0..cursorPos-1:
-      runePos += self.runeLenAt(runePos)
-    self = self[0..runePos-1] & $ch & self[runePos..high(self)]
-  inc cursorPos
-
 proc insertCharAtCursor(self: PTextArea, ch: TRune) =
   self.lines[self.cursorPos.y].insert(ch, self.cursorPos.x)
+  inc self.cursorPos.x
 
 proc removeChar(self: var string, cursorPos: int) =
   var startRunePos = 0
@@ -102,10 +93,6 @@ proc removeChar(self: var string, cursorPos: int) =
   else:
     firstHalf = self[0..startRunePos-1]
   self = firstHalf & self[endRunePos..high(self)]
-    
-
-proc insertChar(self: var string, ch: char, cursorPos: var int) =
-  self.insertChar(runeAt($ch, 0), cursorPos)
 
 proc handleCursorMoving*(self:PTextArea, event: PEvent) =
   let currentLineText = self.lines[self.cursorPos.y]
@@ -173,21 +160,21 @@ proc handleKey*(self: PTextArea, event: PEvent) =
     if self.cursorPos.x >= self.lines[self.cursorPos.y].len:
       self.cursorPos.x = self.lines[self.cursorPos.y].len-1
   of TKey.KeyEnter:
-    let cursorY = self.cursorPos.y
     let cursorX = self.cursorPos.x
+    let cursorY = self.cursorPos.y
     let line = self.lines[cursorY]
     self.lines.insert(initString(""), cursorY+1)
     self.lines[cursorY].set("")
 
     var 
-      i, charCount: int
-      ch,: TRune
+      i: int
     while i < line.len:
-      if charCount < cursorX:
-        self.lines[cursorY].add(ch)
+      let ch = line.runeAt(i)
+      if i < cursorX:
+        self.lines[cursorY].append(ch)
       else:
-        self.lines[cursorY+1].add(ch)
-      inc charCount
+        self.lines[cursorY+1].append(ch)
+      inc i
     inc self.cursorPos.y
     self.cursorPos.x = 0
   of TKey.KeyTab:
@@ -205,7 +192,7 @@ proc handleDoubleClick(self: PTextArea) =
   let cursorY = self.cursorPos.y
   let currentLineText = self.lines[cursorY]
   let firstPos = findFirstWhiteSpace(currentLineText, cursorX)
-  let lastPos = findLastWhiteSpace(currentLineText, cursorX)
+  let lastPos = findLastWhiteSpace(currentLineText, cursorX)+1
   self.selectRegionStart = (firstPos, cursorY)
   self.cursorPos = (lastPos, cursorY)
 
@@ -506,15 +493,19 @@ when isMainModule:
       check buff.cell(1, 1).ch == TRune(0)
 
     proc imitateKeyPresses(textArea: PTextArea, input: string) =
-      for i, ch in input:
-        if ch == '\t':
+      var i = 0
+      let str = initString(input)
+      while i < str.len:
+        let ch = str.at(i)
+        if ch == "\t":
           textArea.handleEvent(PEvent(kind: TEventKind.eventKey, key: TKey.KeyTab))
-        elif ch == '!':
+        elif ch == "!":
           textArea.handleEvent(PEvent(kind: TEventKind.eventKey, key: TKey.KeyEnter))
-        elif ch == ' ':
+        elif ch == " ":
           textArea.handleEvent(PEvent(kind: TEventKind.eventKey, key: TKey.KeySpace))
         else:
-          textArea.handleEvent(PEvent(kind: TEventKind.eventKey, key: TKey.KeyNormal, unicode: runeAt(input, i))) 
+          textArea.handleEvent(PEvent(kind: TEventKind.eventKey, key: TKey.KeyNormal, unicode: str.runeAt(i))) 
+        inc i
 
 
     test "pressing enter":
@@ -1037,7 +1028,7 @@ when isMainModule:
     test "selecting words by double click on the last word":
       textArea.imitateKeyPresses("0á2 4á6 8á0")
       textArea.handleEvent(newDoubleClickEvent(9, 0))
-      check textArea.cursorPos == (10, 0)
+      check textArea.cursorPos == (11, 0)
       check textArea.selectRegionStart == (8, 0)
       
     type
@@ -1065,3 +1056,6 @@ when isMainModule:
       textArea.text = ""
       textArea.groupReadDataFrom(data)
       check(textArea.text == "árvíztűrő fúrógép")
+
+    test "clicking ends any selection":
+      discard
