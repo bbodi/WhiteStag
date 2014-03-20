@@ -22,7 +22,7 @@ type
 proc findFirstWhiteSpace(str: UTFString, runePos: int): int =
   var pos = runePos
   var lastPos = pos
-  while pos > 0:
+  while pos > 0 and pos < str.len:
     if str.runeAt(pos).isWhiteSpace:
       return lastPos
     lastPos = pos
@@ -73,6 +73,9 @@ method readData*(self: PTextArea, stream: PStream) =
   let strPtr = cast[string](stream.readInt32())
   self.text = strPtr
 
+proc clearSelection(self: PTextArea) =
+  self.selectRegionStart = (-1, -1)
+
 proc handleMouse(self: PTextArea, event: PEvent) =
   discard
 
@@ -118,7 +121,7 @@ proc handleCursorMoving*(self:PTextArea, event: PEvent) =
       self.cursorPos = self.selectRegionStart
     elif goingForward and wentBackward:
       self.cursorPos = self.selectRegionStart
-    self.selectRegionStart = (-1, -1)
+    self.clearSelection()
 
   if event.key == TKey.KeyArrowLeft and self.cursorPos.x > 0 and not shiftJustReleased:
     dec self.cursorPos.x
@@ -140,7 +143,7 @@ proc handleCursorMoving*(self:PTextArea, event: PEvent) =
       self.cursorPos.x = newLineText.len
 
   if self.cursorPos == self.selectRegionStart:
-    self.selectRegionStart = (-1, -1)
+    self.clearSelection()
 
 proc handleKey*(self: PTextArea, event: PEvent) =
   case event.key:  
@@ -157,8 +160,10 @@ proc handleKey*(self: PTextArea, event: PEvent) =
       dec self.cursorPos.x
   of TKey.KeyDelete:
     self.lines[self.cursorPos.y].remove(self.cursorPos.x)
-    if self.cursorPos.x >= self.lines[self.cursorPos.y].len:
-      self.cursorPos.x = self.lines[self.cursorPos.y].len-1
+    let currentLineText = self.lines[self.cursorPos.y]
+    if self.cursorPos.x >= currentLineText.len:
+      if currentLineText.len > 0:
+        self.cursorPos.x = currentLineText.len-1
   of TKey.KeyEnter:
     let cursorX = self.cursorPos.x
     let cursorY = self.cursorPos.y
@@ -188,11 +193,18 @@ proc handleKey*(self: PTextArea, event: PEvent) =
 method name*(self: PTextArea): string = "TextArea"
 
 proc handleDoubleClick(self: PTextArea) =
-  let cursorX = self.cursorPos.x
+  var cursorX = self.cursorPos.x
   let cursorY = self.cursorPos.y
   let currentLineText = self.lines[cursorY]
+  let clickedAfterText = cursorX == currentLineText.len
+  if clickedAfterText:
+    dec cursorX
   let firstPos = findFirstWhiteSpace(currentLineText, cursorX)
-  let lastPos = findLastWhiteSpace(currentLineText, cursorX)+1
+  let lastPos = 
+    if clickedAfterText:
+      cursorX + 1
+    else:
+      findLastWhiteSpace(currentLineText, cursorX)+1
   self.selectRegionStart = (firstPos, cursorY)
   self.cursorPos = (lastPos, cursorY)
 
@@ -209,6 +221,7 @@ method handleEvent*(self: PTextArea, event: PEvent) =
     var currentLineText = self.lines[self.cursorPos.y]
     let posX = event.localMouseX
     self.cursorPos.x = if posX > currentLineText.len: currentLineText.len else: posX
+    self.clearSelection()
     if event.doubleClick:
       self.handleDoubleClick()
     self.modified()
@@ -366,6 +379,13 @@ when isMainModule:
       textArea.handleEvent(PEvent(kind: TEventKind.eventKey, key: TKey.KeyDelete))
       check textArea.text == "tst"
       check textArea.cursorPos.x == 1
+
+    test "del single char":
+      textArea.text = "é"
+      textArea.cursorPos.x = 0
+      textArea.handleEvent(PEvent(kind: TEventKind.eventKey, key: TKey.KeyDelete))
+      check textArea.text == ""
+      check textArea.cursorPos.x == 0
 
     test "del on last char":
       textArea.text = "tést"
@@ -1057,5 +1077,36 @@ when isMainModule:
       textArea.groupReadDataFrom(data)
       check(textArea.text == "árvíztűrő fúrógép")
 
-    test "clicking ends any selection":
+    test "clicking clear any selection":
+      textArea.imitateKeyPresses("0á2 4á6 8á0")
+      textArea.cursorPos = (3, 0)
+      textArea.selectRegionStart = (0, 0)
+      textArea.handleEvent(newLocalMouseDownEvent(9, 0))
+      check textArea.selectRegionStart == (-1, -1)
+
+    test "double clicking after the last word":
+      textArea.imitateKeyPresses("0á2")
+      textArea.handleEvent(newDoubleClickEvent(5, 7))
+      check textArea.cursorPos == (3, 0)
+      check textArea.selectRegionStart == (0, 0)
+
+    test "Type, step left, delete, type":
+      textArea.imitateKeyPresses("a")
+      textArea.handleEvent(PEvent(kind: TEventKind.eventKey, key: TKey.KeyArrowLeft))
+      textArea.handleEvent(PEvent(kind: TEventKind.eventKey, key: TKey.KeyDelete))
+      textArea.imitateKeyPresses("a")
+
+    test "type on selected text":
+      discard
+
+    test "delete on selected text":
+      discard
+
+    test "backspace on selected text":
+      discard
+
+    test "enter on selected text":
+      discard
+
+    test "space on selected text":
       discard
