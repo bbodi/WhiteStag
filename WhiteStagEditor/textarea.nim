@@ -1097,16 +1097,52 @@ when isMainModule:
       textArea.imitateKeyPresses("a")
 
     test "type on selected text":
-      discard
-
-    test "delete on selected text":
-      discard
-
-    test "backspace on selected text":
-      discard
-
-    test "enter on selected text":
-      discard
+      textArea.imitateKeyPresses("0123456789")
+      textArea.cursorPos = (6, 0)
+      textArea.selectRegionStart = (2, 0)
+      textArea.imitateKeyPresses("a")
+      check textArea.lines.len == 1
+      check textArea.cursorPos == (3, 0)
+      check textArea.selectRegionStart == (-1, -1)
+      check textArea.text == "01a6789"
 
     test "space on selected text":
-      discard
+      textArea.imitateKeyPresses("0123456789")
+      textArea.cursorPos = (6, 0)
+      textArea.selectRegionStart = (2, 0)
+      textArea.imitateKeyPresses(" ")
+      check textArea.lines.len == 1
+      check textArea.cursorPos == (3, 0)
+      check textArea.selectRegionStart == (-1, -1)
+      check textArea.text == "01 6789"
+
+    test "delete on selected text":
+      textArea.imitateKeyPresses("0123456789")
+      textArea.cursorPos = (6, 0)
+      textArea.selectRegionStart = (2, 0)
+      textArea.handleEvent(PEvent(kind: TEventKind.eventKey, key: TKey.KeyDelete))
+      check textArea.lines.len == 1
+      check textArea.cursorPos == (2, 0)
+      check textArea.selectRegionStart == (-1, -1)
+      check textArea.text == "016789"
+
+    test "backspace on selected text":
+      textArea.imitateKeyPresses("0123456789")
+      textArea.cursorPos = (6, 0)
+      textArea.selectRegionStart = (2, 0)
+      textArea.handleEvent(PEvent(kind: TEventKind.eventKey, key: TKey.KeyBackspace))
+      check textArea.lines.len == 1
+      check textArea.cursorPos == (2, 0)
+      check textArea.selectRegionStart == (-1, -1)
+      check textArea.text == "016789"
+
+    test "enter on selected text":
+      textArea.imitateKeyPresses("0123456789")
+      textArea.cursorPos = (6, 0)
+      textArea.selectRegionStart = (2, 0)
+      textArea.handleEvent(PEvent(kind: TEventKind.eventKey, key: TKey.KeyEnter))
+      check textArea.lines.len == 2
+      check textArea.lines[0] == "01"
+      check textArea.lines[1] == "6789"
+      check textArea.cursorPos == (0, 1)
+      check textArea.selectRegionStart == (-1, -1)
