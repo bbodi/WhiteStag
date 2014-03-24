@@ -14,12 +14,35 @@ import rect
 type
   PTextArea* = ref TTextArea
   TTextArea* = object of TView
-    lines: seq[UTFString]
+    lines: seq[PUTFString]
     cursorPos: TPoint
     showCursor: bool
     selectRegionStart: TPoint
 
-proc findFirstWhiteSpace(str: UTFString, runePos: int): int =
+  TSelectionCoord* = tuple[startPos: TPoint, endPos: TPoint]
+  TTextDrawer = object
+    xPos, yPos: int
+    selection: TSelectionCoord
+    horizontalIndex: int
+    textArea: PTextArea
+
+proc convertSelectedRegionToCoords(textArea: PTextArea): TSelectionCoord =
+  if textArea.selectRegionStart == (-1, -1):
+    return (startPos: (x: -1, y: -1), endPos: (x: -1, y: -1))
+  if textArea.selectRegionStart.y < textArea.cursorPos.y:
+    result.startPos = textArea.selectRegionStart
+    result.endPos = textArea.cursorPos
+  elif textArea.selectRegionStart.y > textArea.cursorPos.y:
+    result.startPos = textArea.cursorPos
+    result.endPos = textArea.selectRegionStart
+  elif textArea.selectRegionStart.x < textArea.cursorPos.x:
+    result.startPos = textArea.selectRegionStart
+    result.endPos = textArea.cursorPos
+  elif textArea.selectRegionStart.x > textArea.cursorPos.x:
+    result.startPos = textArea.cursorPos
+    result.endPos = textArea.selectRegionStart
+
+proc findFirstWhiteSpace(str: PUTFString, runePos: int): int =
   var pos = runePos
   var lastPos = pos
   while pos > 0 and pos < str.len:
@@ -29,7 +52,7 @@ proc findFirstWhiteSpace(str: UTFString, runePos: int): int =
     dec pos
   return pos
 
-proc findLastWhiteSpace(str: UTFString, runePos: int): int =
+proc findLastWhiteSpace(str: PUTFString, runePos: int): int =
   var pos = runePos
   var lastPos = pos
   while pos < str.len-1:
@@ -41,19 +64,19 @@ proc findLastWhiteSpace(str: UTFString, runePos: int): int =
 
 proc updateText(self: PTextArea, cstr: string) =
   self.lines = @[]
-  var str = initString(cstr)
+  var str = newString(cstr)
 
   var currentLineText = ""
   var i = 0
   while i < str.len:
     let ch = str.at(i)
     if ch == "\n":
-      self.lines.add(initString(currentLineText))
+      self.lines.add(newString(currentLineText))
       currentLineText = ""
     else:
       currentLineText &= ch
     inc i
-  self.lines.add(initString(currentLineText))
+  self.lines.add(newString(currentLineText))
 
 proc `text=`*(self: PTextArea, txt: string) =
   self.updateText(txt)
@@ -79,23 +102,9 @@ proc clearSelection(self: PTextArea) =
 proc handleMouse(self: PTextArea, event: PEvent) =
   discard
 
-proc insertCharAtCursor(self: PTextArea, ch: TRune) =
+proc appendCharAtCursor(self: PTextArea, ch: TRune) =
   self.lines[self.cursorPos.y].insert(ch, self.cursorPos.x)
   inc self.cursorPos.x
-
-proc removeChar(self: var string, cursorPos: int) =
-  var startRunePos = 0
-  if cursorPos > 0:
-    for i in 0..cursorPos-1:
-      startRunePos += self.runeLenAt(startRunePos)
-
-  let endRunePos = startRunePos + self.runeLenAt(startRunePos)
-  var firstHalf: string
-  if startRunePos == 0:
-    firstHalf = ""
-  else:
-    firstHalf = self[0..startRunePos-1]
-  self = firstHalf & self[endRunePos..high(self)]
 
 proc handleCursorMoving*(self:PTextArea, event: PEvent) =
   let currentLineText = self.lines[self.cursorPos.y]
@@ -145,30 +154,68 @@ proc handleCursorMoving*(self:PTextArea, event: PEvent) =
   if self.cursorPos == self.selectRegionStart:
     self.clearSelection()
 
+proc deleteRange(self: PTextArea, selection: TSelectionCoord) =
+  let oneLineSelection = selection.startPos.y == selection.endPos.y
+  if oneLineSelection:
+    var line = self.lines[selection.startPos.y]
+    line.remove(selection.startPos.x, selection.endPos.x)
+    self.cursorPos.x = selection.startPos.x
+    self.clearSelection()
+    return
+
+  var firstLine = self.lines[selection.startPos.y]
+  firstLine.remove(selection.startPos.x)
+  var lastLine = self.lines[selection.endPos.y]
+  lastLine.remove(0, selection.endPos.x)
+
+  for y in selection.startPos.y+1 .. selection.endPos.y-1: 
+    self.lines.delete(y)
+
+  self.cursorPos.x = selection.startPos.x
+  self.cursorPos.y = selection.startPos.y
+
+proc deleteSelectedText(self: PTextArea) =
+  let selection = convertSelectedRegionToCoords(self)
+  self.deleteRange(selection)
+  self.clearSelection()
+
+
 proc handleKey*(self: PTextArea, event: PEvent) =
   case event.key:  
   of TKey.KeyNormal:
-    self.insertCharAtCursor(event.unicode)
+    if self.selectRegionStart != (-1, -1):
+      self.deleteSelectedText()
+    self.appendCharAtCursor(event.unicode)
   of TKey.KeySpace:
-    self.insertCharAtCursor(TRune(0x0020))
+    if self.selectRegionStart != (-1, -1):
+      self.deleteSelectedText()
+    self.appendCharAtCursor(TRune(0x0020))
   of TKey.KeyArrowRight, TKey.KeyArrowLeft, TKey.KeyHome, TKey.KeyEnd, TKey.KeyArrowUp, TKey.KeyArrowDown:
     self.handleCursorMoving(event)
   of TKey.KeyBackspace:
-    let pos = self.cursorPos
-    if pos.x != 0:
-      self.lines[self.cursorPos.y].remove(self.cursorPos.x-1)
-      dec self.cursorPos.x
+    if self.selectRegionStart != (-1, -1):
+      self.deleteSelectedText()
+    else:
+      let pos = self.cursorPos
+      if pos.x != 0:
+        self.lines[self.cursorPos.y].removeChar(self.cursorPos.x-1)
+        dec self.cursorPos.x
   of TKey.KeyDelete:
-    self.lines[self.cursorPos.y].remove(self.cursorPos.x)
-    let currentLineText = self.lines[self.cursorPos.y]
-    if self.cursorPos.x >= currentLineText.len:
-      if currentLineText.len > 0:
-        self.cursorPos.x = currentLineText.len-1
+    if self.selectRegionStart != (-1, -1):
+      self.deleteSelectedText()
+    else:
+      self.lines[self.cursorPos.y].removeChar(self.cursorPos.x)
+      let currentLineText = self.lines[self.cursorPos.y]
+      if self.cursorPos.x >= currentLineText.len:
+        if currentLineText.len > 0:
+          self.cursorPos.x = currentLineText.len-1
   of TKey.KeyEnter:
+    if self.selectRegionStart != (-1, -1):
+      self.deleteSelectedText()
     let cursorX = self.cursorPos.x
     let cursorY = self.cursorPos.y
-    let line = self.lines[cursorY]
-    self.lines.insert(initString(""), cursorY+1)
+    let line = newString(self.lines[cursorY])
+    self.lines.insert(newString(""), cursorY+1)
     self.lines[cursorY].set("")
 
     var 
@@ -183,7 +230,7 @@ proc handleKey*(self: PTextArea, event: PEvent) =
     inc self.cursorPos.y
     self.cursorPos.x = 0
   of TKey.KeyTab:
-    self.insertCharAtCursor(TRune(0x0009))
+    self.appendCharAtCursor(TRune(0x0009))
   else:
     return
   self.modified()
@@ -235,31 +282,11 @@ method handleEvent*(self: PTextArea, event: PEvent) =
   else:
     discard
 
-type
-  TTextDrawer = object
-    xPos, yPos: int
-    startSelection, endSelection: TPoint
-    horizontalIndex: int
-    textArea: PTextArea
-
 proc createTextDrawer(textArea: PTextArea): ref TTextDrawer =
   result = new(TTextDrawer)
-  result.startSelection = (-1, -1)
-  result.endSelection = (-1, -1)
-  if textArea.selectRegionStart != (-1, -1):
-    if textArea.selectRegionStart.y < textArea.cursorPos.y:
-      result.startSelection = textArea.selectRegionStart
-      result.endSelection = textArea.cursorPos
-    elif textArea.selectRegionStart.y > textArea.cursorPos.y:
-      result.startSelection = textArea.cursorPos
-      result.endSelection = textArea.selectRegionStart
-    elif textArea.selectRegionStart.x < textArea.cursorPos.x:
-      result.startSelection = textArea.selectRegionStart
-      result.endSelection = textArea.cursorPos
-    elif textArea.selectRegionStart.x > textArea.cursorPos.x:
-      result.startSelection = textArea.cursorPos
-      result.endSelection = textArea.selectRegionStart
-
+  result.selection.startPos = (-1, -1)
+  result.selection.endPos = (-1, -1)
+  result.selection = convertSelectedRegionToCoords(textArea)
   result.textArea = textArea
 
 proc drawCursorIfNeeded(self: ref TTextDrawer, buff: var TDrawBuffer) =
@@ -270,13 +297,14 @@ proc drawCursorIfNeeded(self: ref TTextDrawer, buff: var TDrawBuffer) =
 
 proc drawChar(self: ref TTextDrawer, charToDraw: string, buff: var TDrawBuffer) =
   buff.writeText(self.xPos, self.yPos, charToDraw, fg = TextPanelTextColor.color(self.textArea.isFocused))
-  if self.startSelection.x != -1:
-    let oneLineSelection = self.yPos == self.startSelection.y and self.yPos == self.endSelection.y
-    let xIsOk = self.horizontalIndex >= self.startSelection.x and self.horizontalIndex < self.endSelection.x
+  let selection = self.selection;
+  if self.selection.startPos.x != -1:
+    let oneLineSelection = self.yPos == selection.startPos.y and self.yPos == selection.endPos.y
+    let xIsOk = self.horizontalIndex >= selection.startPos.x and self.horizontalIndex < selection.endPos.x
 
-    let firstSelectedLine = self.yPos == self.startSelection.y and self.horizontalIndex >= self.startSelection.x
-    let middleSelectedLine = self.yPos > self.startSelection.y and self.yPos < self.endSelection.y
-    let lastSelectedLine = self.yPos == self.endSelection.y and self.horizontalIndex < self.endSelection.x
+    let firstSelectedLine = self.yPos == selection.startPos.y and self.horizontalIndex >= selection.startPos.x
+    let middleSelectedLine = self.yPos > selection.startPos.y and self.yPos < selection.endPos.y
+    let lastSelectedLine = self.yPos == selection.endPos.y and self.horizontalIndex < selection.endPos.x
     var needHighlight = false
     if oneLineSelection:
       if xIsOk:
@@ -514,7 +542,7 @@ when isMainModule:
 
     proc imitateKeyPresses(textArea: PTextArea, input: string) =
       var i = 0
-      let str = initString(input)
+      let str = newString(input)
       while i < str.len:
         let ch = str.at(i)
         if ch == "\t":
@@ -1146,3 +1174,30 @@ when isMainModule:
       check textArea.lines[1] == "6789"
       check textArea.cursorPos == (0, 1)
       check textArea.selectRegionStart == (-1, -1)
+
+    test "backspace deletes line ending":
+      textArea.imitateKeyPresses("01!23!45!67!89")
+      check textArea.lines.len == 5
+
+      textArea.cursorPos.x = 0
+      textArea.handleEvent(PEvent(kind: TEventKind.eventKey, key: TKey.KeyBackspace))
+      check textArea.lines.len == 4
+      check textArea.lines[3] == "6789"
+
+      textArea.cursorPos.x = 0
+      textArea.handleEvent(PEvent(kind: TEventKind.eventKey, key: TKey.KeyBackspace))
+      check textArea.lines.len == 3
+      check textArea.lines[2] == "456789"
+
+      textArea.cursorPos.x = 0
+      textArea.handleEvent(PEvent(kind: TEventKind.eventKey, key: TKey.KeyBackspace))
+      check textArea.lines.len == 2
+      check textArea.lines[1] == "23456789"
+
+      textArea.cursorPos.x = 0
+      textArea.handleEvent(PEvent(kind: TEventKind.eventKey, key: TKey.KeyBackspace))
+      check textArea.lines.len == 1
+      check textArea.lines[0] == "1223456789"
+
+
+    # több soros kijelöléses input

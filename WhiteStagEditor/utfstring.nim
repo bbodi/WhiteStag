@@ -1,14 +1,15 @@
 import unicode
 
 type
-  UTFString* = object
+  PUTFString* = ref UTFString
+  UTFString = object
     chars: seq[TRune]
 
 const
   NewLineRune = TRune(0x0A)
   TabRune* = TRune(0x0009)
 
-proc initFromString(self: var UTFString, str: string) =
+proc initFromString(self: PUTFString, str: string) =
   self.chars = @[]
   var pos = 0
   var ch: TRune
@@ -22,8 +23,14 @@ proc initFromString(self: var UTFString, str: string) =
     prevRune = ch
 
 
-proc initString*(str: string): UTFString =
-  result.initFromString(str)  
+proc newString*(str: string): PUTFString =
+  result = new(UTFString)
+  result.initFromString(str)
+
+proc newString*(str: PUTFString): PUTFString =
+  result = new(UTFString)
+  result.chars = str.chars
+
 
 proc charFromRune(rune: TRune): string =
   if rune == TRune(NewLineRune):
@@ -31,46 +38,55 @@ proc charFromRune(rune: TRune): string =
   else:
     result = rune.toUTF8
 
-proc strFromRunes(self: UTFString): string =
+proc strFromRunes(self: ref UTFString): string =
   result = ""
   for ch in self.chars:
     result &= charFromRune(ch)  
 
-proc runeAt*(self: UTFString, i: int): TRune = self.chars[i]
+proc runeAt*(self: ref UTFString, i: int): TRune = self.chars[i]
 
-proc at*(self: UTFString, i: int): string = 
+proc at*(self: ref UTFString, i: int): string = 
   charFromRune(self.chars[i])
 
-proc len*(self: UTFString): int = self.chars.len
+proc len*(self: ref UTFString): int = self.chars.len
 
-proc set*(self: var UTFString, i: int, ch: TRune) =
+proc set*(self: ref UTFString, i: int, ch: TRune) =
   self.chars[i] = ch
 
-proc set*(self: var UTFString, i: int, ch: string) =
+proc set*(self: ref UTFString, i: int, ch: string) =
   self.set(i, ch.runeAt(0))
 
-proc set*(self: var UTFString, str: string) =
+proc set*(self: ref UTFString, str: string) =
   self.initFromString(str)
 
-proc `==`*(self: UTFString, str: string): bool = 
+proc `==`*(self: ref UTFString, str: string): bool = 
   self.strFromRunes() == str
 
-proc `&`*(str: string, utfstr: UTFString): string =
+proc `&`*(str: string, utfstr: ref UTFString): string =
   return str & utfstr.strFromRunes()
 
-proc `&=`*(self: var string, utfstr: UTFString) =
+proc `&=`*(self: var string, utfstr: ref UTFString) =
   self &= utfstr.strFromRunes()
 
-proc insert*(self: var UTFString, ch: TRune, index: int) =
+proc insert*(self: ref UTFString, ch: TRune, index: int) =
   self.chars.insert(ch, index)
 
-proc append*(self: var UTFString, ch: TRune) =
+proc append*(self: ref UTFString, ch: TRune) =
   self.chars.add(ch)
 
-proc remove*(self: var UTFString, index: int) =
+proc removeChar*(self: ref UTFString, index: int) =
   self.chars.delete(index)
 
-proc `$`*(self: UTFString): string =
+proc remove*(self: ref UTFString, fromIndex: int, toIndex : int = -1) =
+  var toIndexMod = toIndex
+  if toIndex == -1:
+    toIndexMod = self.len
+  if toIndexMod <= fromIndex:
+    return
+  for i in fromIndex .. <toIndexMod:
+    self.chars.delete(fromIndex)
+
+proc `$`*(self: ref UTFString): string =
   self.strFromRunes()
 
 when isMainModule:
@@ -81,22 +97,22 @@ when isMainModule:
       discard
 
     test "UTF character handling":
-      let str = initString("éáőúűóü")
+      let str = newString("éáőúűóü")
       check str.len == 7
       check str.chars.len == 7
 
     test "modifying character":
-      var str = initString("éáőúűóü")
+      var str = newString("éáőúűóü")
       str.set(1, "X")
       check str == "éXőúűóü"
 
     test "equality":
-      check initString("test") == "test"
-      check initString("éáőúűóü") == "éáőúűóü"
-      check initString("é á\nő\tú") == "é á\nő\tú"
+      check newString("test") == "test"
+      check newString("éáőúűóü") == "éáőúűóü"
+      check newString("é á\nő\tú") == "é á\nő\tú"
 
     test "spaces":
-      var str = initString("é á ő")
+      var str = newString("é á ő")
       check str.len == 5
       check str.runeAt(1).isWhiteSpace
       check str.runeAt(3).isWhiteSpace
@@ -104,7 +120,7 @@ when isMainModule:
       check str.at(3) == " "
 
     test "newlines":
-      var str = initString("é\ná\nő")
+      var str = newString("é\ná\nő")
       check str.len == 5
       check str.runeAt(1).isWhiteSpace
       check str.runeAt(3).isWhiteSpace
@@ -112,7 +128,7 @@ when isMainModule:
       check str.at(3) == "\n"
 
     test "tabs":
-      var str = initString("é\tá\tő")
+      var str = newString("é\tá\tő")
       check str.len == 5
       check str.runeAt(1).isWhiteSpace
       check str.runeAt(3).isWhiteSpace
@@ -120,17 +136,40 @@ when isMainModule:
       check str.at(3) == "\t"
 
     test "adding it to string":
-      check (("asd" & initString("éáő")) == "asdéáő")
+      check (("asd" & newString("éáő")) == "asdéáő")
       var str = "asd"
-      str &= initString("éáő")
+      str &= newString("éáő")
       check str == "asdéáő"
 
     test "inserting":
-      var str = initString("éáő")
+      var str = newString("éáő")
       str.insert("X".runeAt(0), 1)
       check str == "éXáő"
 
-    test "remove":
-      var str = initString("éáő")
-      str.remove(1)
+    test "removeChar":
+      var str = newString("éáő")
+      str.removeChar(1)
       check str == "éő"
+
+    test "copy":
+      var str = newString("éáő")
+      let str2 = newString(str)
+      str.removeChar(1)
+      check str == "éő"
+      check str2 == "éáő"
+
+    test "remove":
+      proc createThenRemove(text: string, fromIndex: int, toIndex: int = -1): ref UTFString =
+        result = newString(text)
+        result.remove(fromIndex, toIndex)
+      check createThenRemove("éáőúűóü", 1) == "é"
+      check createThenRemove("éáőúűóü", 2) == "éá"
+      check createThenRemove("éáőúűóü", 0) == ""
+      check createThenRemove("éáőúűóü", 6) == "éáőúűó"
+      check createThenRemove("éáőúűóü", 7) == "éáőúűóü"
+
+      check createThenRemove("éáőúűóü", 3, 3) == "éáőúűóü"
+      check createThenRemove("éáőúűóü", 3, 4) == "éáőűóü"
+      check createThenRemove("éáőúűóü", 3, 7) == "éáő" 
+      check createThenRemove("éáőúűóü", 7, 3) == "éáőúűóü"
+      check createThenRemove("0123456789", 2, 6) == "016789"
