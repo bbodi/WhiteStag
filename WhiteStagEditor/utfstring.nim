@@ -17,7 +17,7 @@ proc initFromString(self: PUTFString, str: string) =
   while pos < str.len:
     fastRuneAt(str, pos, ch , true)
     if prevRune == TRune(0x0D) and ch == TRune(0x0A):
-      self.chars[high(self.chars)] = TRune(NewLineRune)
+      self.chars[self.chars.len-1] = TRune(NewLineRune)
     else:
       self.chars.add(ch)
     prevRune = ch
@@ -89,6 +89,10 @@ proc remove*(self: ref UTFString, fromIndex: int, toIndex : int = -1) =
 proc `$`*(self: ref UTFString): string =
   self.strFromRunes()
 
+proc append*(self: ref UTFString, other: ref UTFString) =
+  self.chars.add(other.chars)
+    
+
 when isMainModule:
   import unittest
 
@@ -157,6 +161,14 @@ when isMainModule:
       str.removeChar(1)
       check str == "éő"
       check str2 == "éáő"
+
+    test "append utf":
+      var str = newString("éáő")
+      let str2 = newString("őúű")
+      str.append(str2)
+      check str.len == 6
+      check str == "éáőőúű"
+      check str2 == "őúű"
 
     test "remove":
       proc createThenRemove(text: string, fromIndex: int, toIndex: int = -1): ref UTFString =

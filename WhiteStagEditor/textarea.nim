@@ -200,6 +200,12 @@ proc handleKey*(self: PTextArea, event: PEvent) =
       if pos.x != 0:
         self.lines[self.cursorPos.y].removeChar(self.cursorPos.x-1)
         dec self.cursorPos.x
+      elif pos.y > 0:
+        let currentLineText = self.lines[self.cursorPos.y]
+        self.lines.delete(self.cursorPos.y)
+        dec self.cursorPos.y
+        self.lines[self.cursorPos.y].append(currentLineText)
+        self.cursorPos.x = self.lines[self.cursorPos.y].len - currentLineText.len
   of TKey.KeyDelete:
     if self.selectRegionStart != (-1, -1):
       self.deleteSelectedText()
@@ -1183,21 +1189,25 @@ when isMainModule:
       textArea.handleEvent(PEvent(kind: TEventKind.eventKey, key: TKey.KeyBackspace))
       check textArea.lines.len == 4
       check textArea.lines[3] == "6789"
+      check textArea.cursorPos == (2, 3)
 
       textArea.cursorPos.x = 0
       textArea.handleEvent(PEvent(kind: TEventKind.eventKey, key: TKey.KeyBackspace))
       check textArea.lines.len == 3
       check textArea.lines[2] == "456789"
+      check textArea.cursorPos == (2, 2)
 
       textArea.cursorPos.x = 0
       textArea.handleEvent(PEvent(kind: TEventKind.eventKey, key: TKey.KeyBackspace))
       check textArea.lines.len == 2
       check textArea.lines[1] == "23456789"
+      check textArea.cursorPos == (2, 1)
 
       textArea.cursorPos.x = 0
       textArea.handleEvent(PEvent(kind: TEventKind.eventKey, key: TKey.KeyBackspace))
       check textArea.lines.len == 1
-      check textArea.lines[0] == "1223456789"
+      check textArea.lines[0] == "0123456789"
+      check textArea.cursorPos == (2, 0)
 
 
     # több soros kijelöléses input
