@@ -154,6 +154,14 @@ proc handleCursorMoving*(self:PTextArea, event: PEvent) =
   if self.cursorPos == self.selectRegionStart:
     self.clearSelection()
 
+proc appendToPrevLine*(self: PTextArea, x, y: var int) =
+  let currentLineText = self.lines[y]
+  self.lines.delete(y)
+  dec y
+  self.lines[y].append(currentLineText)
+
+  x = self.lines[y].len - currentLineText.len
+
 proc deleteRange(self: PTextArea, selection: TSelectionCoord) =
   let oneLineSelection = selection.startPos.y == selection.endPos.y
   if oneLineSelection:
@@ -168,17 +176,21 @@ proc deleteRange(self: PTextArea, selection: TSelectionCoord) =
   var lastLine = self.lines[selection.endPos.y]
   lastLine.remove(0, selection.endPos.x)
 
-  for y in selection.startPos.y+1 .. selection.endPos.y-1: 
-    self.lines.delete(y)
+  let nextLine = selection.startPos.y+1
+  var endY = selection.endPos.y
+  for y in nextLine .. selection.endPos.y-1: 
+    self.lines.delete(nextLine)
+    dec endY
 
-  self.cursorPos.x = selection.startPos.x
-  self.cursorPos.y = selection.startPos.y
+  var endX = selection.endPos.x
+  self.appendToPrevLine(endX, endY)
+  self.cursorPos.x = endX
+  self.cursorPos.y = endY
 
 proc deleteSelectedText(self: PTextArea) =
   let selection = convertSelectedRegionToCoords(self)
   self.deleteRange(selection)
   self.clearSelection()
-
 
 proc handleKey*(self: PTextArea, event: PEvent) =
   case event.key:  
@@ -201,11 +213,7 @@ proc handleKey*(self: PTextArea, event: PEvent) =
         self.lines[self.cursorPos.y].removeChar(self.cursorPos.x-1)
         dec self.cursorPos.x
       elif pos.y > 0:
-        let currentLineText = self.lines[self.cursorPos.y]
-        self.lines.delete(self.cursorPos.y)
-        dec self.cursorPos.y
-        self.lines[self.cursorPos.y].append(currentLineText)
-        self.cursorPos.x = self.lines[self.cursorPos.y].len - currentLineText.len
+        self.appendToPrevLine(self.cursorPos.x, self.cursorPos.y)
   of TKey.KeyDelete:
     if self.selectRegionStart != (-1, -1):
       self.deleteSelectedText()
@@ -378,6 +386,9 @@ when isMainModule:
       textArea.text = "012340123401234"
       check textArea.lines.len == 1
       check textArea.lines[0] == "012340123401234"
+
+    test "empty textarea has one line":
+      check createTextArea(10, 10).lines.len == 1
 
     test "setting UTF8 text":
       textArea.text = "áéőúóáéőúóáéőúó"
@@ -916,6 +927,10 @@ when isMainModule:
       check buff.cell(5, 0).ch.toUTF8 == " "
       check buff.cell(5, 0).bg != defaultColor
 
+    test "Changing cursor position with mouse in an empty textarea":
+      textArea.handleEvent(PEvent(kind: TEventKind.eventMouseButtonDown, localMouseX: 3, localMouseY: 2, local: true))
+      check textArea.cursorPos == (0, 0)
+
     test "Changing cursor position with mouse":
       textArea.imitateKeyPresses("01234\t56")
       
@@ -1209,5 +1224,55 @@ when isMainModule:
       check textArea.lines[0] == "0123456789"
       check textArea.cursorPos == (2, 0)
 
+    test "input while multiline selection 1":
+      textArea.imitateKeyPresses("01!23!45!67!89")
+      textArea.cursorPos = (1, 2)
+      textArea.selectRegionStart = (0, 1)
 
-    # több soros kijelöléses input
+      textArea.imitateKeyPresses("á")
+      check textArea.lines.len == 4
+      check textArea.cursorPos == (1, 1)
+      check textArea.selectRegionStart == (-1, -1)
+      check textArea.text == "01\ná5\n67\n89"
+
+    test "input while multiline selection 2":
+      textArea.imitateKeyPresses("01!23!45!67!89")
+      textArea.cursorPos.x = 0
+      textArea.selectRegionStart = (0, 0)
+
+      textArea.imitateKeyPresses("á")
+      check textArea.lines.len == 1
+      check textArea.cursorPos == (1, 0)
+      check textArea.selectRegionStart == (-1, -1)
+      check textArea.text == "á89"
+
+    test "input while multiline selection with reversed selection positions":
+      textArea.imitateKeyPresses("01!23!45!67!89")
+      textArea.cursorPos = (0, 0)
+      textArea.selectRegionStart = (0, 4)
+
+      textArea.imitateKeyPresses("á")
+      check textArea.lines.len == 1
+      check textArea.cursorPos == (1, 0)
+      check textArea.selectRegionStart == (-1, -1)
+      check textArea.text == "á89"
+
+    test "handling cursor moving to the previous line":
+      textArea.imitateKeyPresses("01!23!45!67!89")
+      textArea.handleEvent(PEvent(kind: TEventKind.eventKey, key: TKey.KeyArrowLeft))
+      textArea.handleEvent(PEvent(kind: TEventKind.eventKey, key: TKey.KeyArrowLeft))
+      check textArea.cursorPos == (0, 4)
+      textArea.handleEvent(PEvent(kind: TEventKind.eventKey, key: TKey.KeyArrowLeft))
+      check textArea.cursorPos == (2, 3)
+      textArea.handleEvent(PEvent(kind: TEventKind.eventKey, key: TKey.KeyArrowLeft))
+      textArea.handleEvent(PEvent(kind: TEventKind.eventKey, key: TKey.KeyArrowLeft))
+      textArea.handleEvent(PEvent(kind: TEventKind.eventKey, key: TKey.KeyArrowLeft))
+      check textArea.cursorPos == (2, 2)
+      textArea.handleEvent(PEvent(kind: TEventKind.eventKey, key: TKey.KeyArrowLeft))
+      textArea.handleEvent(PEvent(kind: TEventKind.eventKey, key: TKey.KeyArrowLeft))
+      textArea.handleEvent(PEvent(kind: TEventKind.eventKey, key: TKey.KeyArrowLeft))
+      check textArea.cursorPos == (2, 1)
+      textArea.handleEvent(PEvent(kind: TEventKind.eventKey, key: TKey.KeyArrowLeft))
+      textArea.handleEvent(PEvent(kind: TEventKind.eventKey, key: TKey.KeyArrowLeft))
+      textArea.handleEvent(PEvent(kind: TEventKind.eventKey, key: TKey.KeyArrowLeft))
+      check textArea.cursorPos == (2, 0)
