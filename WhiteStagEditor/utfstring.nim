@@ -17,7 +17,7 @@ proc initFromString(self: PUTFString, str: string) =
   while pos < str.len:
     fastRuneAt(str, pos, ch , true)
     if prevRune == TRune(0x0D) and ch == TRune(0x0A):
-      self.chars[self.chars.len-1] = TRune(NewLineRune)
+      self.chars[self.chars.len-1] = NewLineRune
     else:
       self.chars.add(ch)
     prevRune = ch
@@ -33,7 +33,7 @@ proc newString*(str: PUTFString): PUTFString =
 
 
 proc charFromRune(rune: TRune): string =
-  if rune == TRune(NewLineRune):
+  if rune == NewLineRune:
     result = "\n"
   else:
     result = rune.toUTF8

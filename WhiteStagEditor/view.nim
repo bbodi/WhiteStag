@@ -39,7 +39,6 @@ type
     executingResult: TExecutingResult
     useClipping*: bool
     minWidth*, minHeight*: int
-    focusedView: TOption[PView]
     bottomView, topView: TOption[PView]
     
     selectable: bool
@@ -254,7 +253,10 @@ proc font*(self: PView): TFont =
   return self.owner.expect("").font
 
 proc isFocused*(self: PView): bool =
-  self.owner.isSome and self.owner.data.focusedView.equals(self)
+  self.owner.isSome and self.owner.data.topView.equals(self)
+
+proc isActive*(self: PView): bool =
+  self.owner.isNone or (self.isFocused and self.owner.data.isActive)
 
 proc modified*(self: PView) = 
   self.pDirty = true
@@ -365,8 +367,6 @@ proc removeFromLinkedList(self: PView, childToDelete: PView) =
     self.bottomView = nextView
   if self.topView.equals(childToDelete):
     self.topView = prevView
-  if self.focusedView.equals(childToDelete):
-    self.focusedView = none[PView]()
 
 proc makeLast(self: PView, child: PView) =
   if self.views.len <= 1:
@@ -383,24 +383,17 @@ proc makeMeLast(self: PView) =
     self.owner.data.makeLast(self)
     self.owner.data.makeMeLast()
 
-proc clearFocusedViews*(self: PView) =
-  self.focusedView.ifSome do (focusedView: PView):
-    focusedView.broadcast(PEvent(kind: TEventKind.eventLostFocus, view: cast[pointer](focusedView)))
-
-  self.focusedView = none[PView]()
+proc sendLostFocusEvent*(self: PView) =
+  self.topView.ifSome do (topView: PView):
+    topView.broadcast(PEvent(kind: TEventKind.eventLostFocus, view: cast[pointer](topView)))
 
   self.owner.ifSome do (parentView: PView):
-     parentView.clearFocusedViews()
+     parentView.sendLostFocusEvent()
   
-
-proc setChildFocused(self: PView, child: PView) =
-  self.clearFocusedViews()
-  self.focusedView = some(child)
 
 proc setMyParentsFocused(self: PView) =
   self.owner.ifSome do (parent: PView):
     parent.makeMeLast()
-    parent.setChildFocused(self)
     parent.setMyParentsFocused()
   
 # Unit testet arra az esetre, ha már egy fókuszált elemre kerül a fókusz
@@ -411,14 +404,13 @@ proc setFocused*(self: PView) =
   
 
 proc changeSwapFocusedViewTo(self: PView, child: PView) =
-  self.focusedView.ifSome do (focusedView: PView):
+  self.topView.ifSome do (focusedView: PView):
     focusedView.broadcast(PEvent(kind: TEventKind.eventLostFocus, view: cast[pointer](focusedView)))
   self.broadcast(PEvent(kind: TEventKind.eventGetFocus, view: cast[pointer](child)))
   self.makeLast(child)
-  self.focusedView = some(child)
 
 proc selectNext*(self: PView, backward: bool = false) =
-  if self.focusedView.isNone:
+  if self.topView.isNone:
     if self.views.len == 0:
       return
     if not backward:
@@ -426,7 +418,7 @@ proc selectNext*(self: PView, backward: bool = false) =
     else:
       self.bottomView.expect("views.len > 0").setFocused()
     return
-  let focusedView = self.focusedView.data
+  let focusedView = self.topView.data
   if not backward:
     if focusedView.nextView.isNone:
       self.changeSwapFocusedViewTo(self.bottomView.data)
@@ -460,7 +452,7 @@ proc addViewAtCenterX*(self: PView, child: PView, y: int) =
   addView(self, child, center.x, y)
 
 proc removeView*(self: PView, childToDelete: PView) = 
-  let currentViewWasRemoved = self.focusedView.equals(childToDelete)
+  let currentViewWasRemoved = self.topView.equals(childToDelete)
   let index = self.views.find(childToDelete)
   doAssert(index != -1, "removeView: View doesnt exists in views")
   self.views.delete(index)
@@ -531,7 +523,7 @@ proc getRootView(self: PView): PView =
 
 proc executeView*(self, view: PView, x, y: int): TExecutingResult =
   doAssert(self != view, "self.xecuteView(self)")
-  let savedFocusedView = self.focusedView
+  let savedFocusedView = self.topView
   self.addView(view, x, y)
   view.setFocused()
   view.pExecuting = true
@@ -591,10 +583,14 @@ when isMainModule:
       var testv1 = PTestView(name: "testv1", events : @[], recordingEvents : false)
       var testv2 = PTestView(name: "testv2", events : @[], recordingEvents : false)
       var testv3 = PTestView(name: "testv3", events : @[], recordingEvents : false)
+      var testv4 = PTestView(name: "testv4", events : @[], recordingEvents : false)
+      var testv5 = PTestView(name: "testv5", events : @[], recordingEvents : false)
       var v0: PView = testv0
       var v1: PView = testv1
       var v2: PView = testv2
       var v3: PView = testv3
+      var v4: PView = testv4
+      var v5: PView = testv5
 
     test "test Ref Equality":
       check v0 != v1
@@ -707,18 +703,18 @@ when isMainModule:
       check v0.topView.isNone
       check v0.bottomView.isNone
       check v0.views.len == 0
-      check v0.focusedView.isNone
+      check v0.topView.isNone
 
     test "removing Focused view":
       v0.addView(v1, 0, 0)
       check(1 == v0.views.len)
       v1.setFocused()
-      check v0.focusedView.equals(v1)
+      check v0.topView.equals(v1)
       v0.removeView(v1)
       check v0.topView.isNone
       check v0.bottomView.isNone
       check v0.views.len == 0
-      check v0.focusedView.isNone
+      check v0.topView.isNone
 
     test "makeLast":
       v0.addView(v1, 0, 0)
@@ -785,6 +781,65 @@ when isMainModule:
       v2.setFocused()
       check v1.isFocused == false
       check v2.isFocused
+
+    test "setCurrentView2":
+      v0.addView(v1, 0, 0)
+      v0.addView(v2, 0, 0)
+      v1.addView(v5, 0, 0)
+      v2.addView(v3, 0, 0)
+      v2.addView(v4, 0, 0)
+
+      v4.setFocused()
+      check v4.isFocused
+      check v4.isActive
+      check v2.isFocused
+      check v2.isActive
+      check v3.isFocused == false
+      check v3.isActive == false
+
+      check v1.isFocused == false
+      check v1.isActive == false
+      check v5.isFocused
+      check v5.isActive == false
+
+      v3.setFocused()
+      check v4.isFocused == false
+      check v4.isActive == false
+      check v2.isFocused
+      check v2.isActive
+      check v3.isFocused
+      check v3.isActive
+
+      check v1.isFocused == false
+      check v1.isActive == false
+      check v5.isFocused
+      check v5.isActive == false
+
+      v4.setFocused()
+      check v4.isFocused
+      check v4.isActive
+      check v2.isFocused
+      check v2.isActive
+      check v3.isFocused == false
+      check v3.isActive == false
+
+      check v1.isFocused == false
+      check v1.isActive == false
+      check v5.isFocused
+      check v5.isActive == false
+
+      v5.setFocused()
+      check v4.isFocused
+      check v4.isActive == false
+      check v2.isFocused == false
+      check v2.isActive == false
+      check v3.isFocused == false
+      check v3.isActive == false
+
+      check v1.isFocused
+      check v1.isActive
+      check v5.isFocused
+      check v5.isActive
 
     test "setCurrentView2":
       v0.addView(v1, 0, 0)
@@ -930,7 +985,7 @@ when isMainModule:
       v1.addView(v2, 0, 0)
       v2.addView(v3, 0, 0)
 
-      v3.clearFocusedViews()
+      v3.sendLostFocusEvent()
 
       testv0.startRecordingEvents()
       testv1.startRecordingEvents()
@@ -955,7 +1010,7 @@ when isMainModule:
       v0.addView(testv1, 0, 0)
       testv1.setFocused()
       testv1.startRecordingEvents()
-      testv1.clearFocusedViews()
+      testv1.sendLostFocusEvent()
       check(testv1.events.len == 1)
       check(testv1.events[0].kind == TEventKind.eventLostFocus)
       check(testv1.events[0].sourceViewEquals(testv1))
@@ -970,7 +1025,7 @@ when isMainModule:
       testv1.startRecordingEvents()
       testv2.startRecordingEvents()
       testv3.startRecordingEvents()
-      v3.clearFocusedViews()
+      v3.sendLostFocusEvent()
       let viewThatLostCurrentState = testv3
 
       proc checkViewsGotTheRightEvents(testView: PTestView) =
@@ -1102,12 +1157,6 @@ when isMainModule:
         check win.bottomView.data == bottom
         check win.topView.data == top
 
-      win.clearFocusedViews()
-
-      checkViewOrder(testv0, testv2)
-      check win.focusedView.isNone
-
-      win.selectNext()
       check testv2.isFocused
       checkViewOrder(testv0, testv2)
 

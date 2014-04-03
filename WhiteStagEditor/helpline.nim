@@ -24,6 +24,7 @@ method handleEvent*(self: PHelpLine, event: PEvent) =
   of TEventKind.eventMouseMove, TEventKind.eventMouseButtonUp:
     self.mouseX = event.mouseX div self.font.charWidth
     self.mouseY = event.mouseY div self.font.charHeight
+    self.modified()
   else:
     discard
 

@@ -34,7 +34,7 @@ type
     w, h: int
     sdlEvent: sdl.TEvent
     nextTickTime: uint32
-    lastMouseButtonDownEvent: event.PEvent
+    lastMouseButtonDownEvent: event.TEvent
     lastMouseButtonDownTimeStamp: int32
     font12*: TFont
     font14*: TFont
@@ -55,7 +55,6 @@ proc loadSdlFont(fileName: string, size: cint): sdl_ttf.PFont  =
 
 proc loadFont*(self: PSdlEngine, size: int, name: string = "DejaVuSansMono"): TFont = 
   var font: TFont
-  var fileName = name
   font.normalSdlFont = loadSdlFont(name & ".ttf", cint(size))
 
   font.boldSdlFont = loadSdlFont(name & "-Bold.ttf", cint(size))
@@ -68,8 +67,6 @@ proc loadFont*(self: PSdlEngine, size: int, name: string = "DejaVuSansMono"): TF
   font.charHeight = TPixel(charH)
   font.size = size
   return font
-
-const cmdTickId = 1
 
 
 proc init*(w, h: int, fontSize: int): PSdlEngine = 
@@ -387,9 +384,9 @@ proc processSdlEvent(self: PSdlEngine, sdlEvent: sdl.PEvent): event.PEvent =
     if int(now - self.lastMouseButtonDownTimeStamp) < 500 and self.lastMouseButtonDownEvent.kind == eventMouseButtonDown:
       let sameX = self.lastMouseButtonDownEvent.mouseX == result.mouseX
       let sameY = self.lastMouseButtonDownEvent.mouseY == result.mouseY
-      result.doubleClick =  sameX and sameY
+      result.doubleClick = sameX and sameY
     self.lastMouseButtonDownTimeStamp = now
-    self.lastMouseButtonDownEvent = result
+    self.lastMouseButtonDownEvent = result[]
   of sdl.MOUSEBUTTONUP:
     let t = EvMouseButton(sdlEvent)
     result = event.PEvent(kind: eventMouseButtonUp)
@@ -401,7 +398,6 @@ proc processSdlEvent(self: PSdlEngine, sdlEvent: sdl.PEvent): event.PEvent =
     result.mouseX = TPixel(t.x)
     result.mouseY = TPixel(t.y)
   of sdl.USEREVENT:
-    let t = EvUser(sdlEvent)
     result = event.PEvent(kind: eventTick)
   of sdl.QUITEV:
     result = event.PEvent(kind: eventCommand)
@@ -447,6 +443,7 @@ when isMainModule:
   suite "SDLEngine Test Suite":
     setup:
       var buff = createDrawBuffer(10, 10)
+      var engine = PSdlEngine()
 
     test "getSameColorRegion for a non-colored region shorter than a line":
       # 0123456789
@@ -670,3 +667,16 @@ when isMainModule:
 
       for i in 0..7:
         testTextRegion(rects[5+i], 0, (2+i)*20, 10*10, 20, "          ", ColorNone)
+
+    test "event processing: double click":
+      var mouseButtonEvent = TMouseButtonEvent()
+      mouseButtonEvent.x = 1
+      mouseButtonEvent.y = 1
+      mouseButtonEvent.kind = MOUSEBUTTONDOWN
+      mouseButtonEvent.button = sdl.BUTTON_LEFT
+      let result = engine.processSdlEvent(cast[ptr sdl.TEvent](addr mouseButtonEvent))
+      check result.kind == eventMouseButtonDown
+
+      let result2 = engine.processSdlEvent(cast[ptr sdl.TEvent](addr mouseButtonEvent))
+      check result.kind == eventMouseButtonDown
+      check result2.doubleClick

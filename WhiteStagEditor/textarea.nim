@@ -132,8 +132,12 @@ proc handleCursorMoving*(self:PTextArea, event: PEvent) =
       self.cursorPos = self.selectRegionStart
     self.clearSelection()
 
-  if event.key == TKey.KeyArrowLeft and self.cursorPos.x > 0 and not shiftJustReleased:
-    dec self.cursorPos.x
+  if event.key == TKey.KeyArrowLeft and not shiftJustReleased:
+    if self.cursorPos.x > 0:
+      dec self.cursorPos.x
+    elif self.cursorPos.y > 0:
+      dec self.cursorPos.y
+      self.cursorPos.x = self.lines[self.cursorPos.y].len
   elif event.key == TKey.KeyArrowRight and self.cursorPos.x < currentLineText.len and not shiftJustReleased:
     inc self.cursorPos.x
   elif event.key == TKey.KeyHome:
@@ -288,9 +292,11 @@ method handleEvent*(self: PTextArea, event: PEvent) =
     self.modified()
     event.setProcessed()
   of TEventKind.eventKey:
-    if self.isFocused:
+    if self.isActive:
       self.handleKey(event)
   of TEventKind.eventTick:
+    if not self.isActive:
+      return
     self.showCursor = not self.showCursor
     self.modified()
   else:
@@ -306,11 +312,11 @@ proc createTextDrawer(textArea: PTextArea): ref TTextDrawer =
 proc drawCursorIfNeeded(self: ref TTextDrawer, buff: var TDrawBuffer) =
   let isCurrentRow = self.yPos == self.textArea.cursorPos.y
   let isCurrentColumn = self.horizontalIndex == self.textArea.cursorPos.x
-  if isCurrentRow and isCurrentColumn and self.textArea.showCursor and self.textArea.isFocused:
+  if isCurrentRow and isCurrentColumn and self.textArea.showCursor and self.textArea.isActive:
     buff.setCell(self.xPos, self.yPos, bg = ColorRed)
 
 proc drawChar(self: ref TTextDrawer, charToDraw: string, buff: var TDrawBuffer) =
-  buff.writeText(self.xPos, self.yPos, charToDraw, fg = TextPanelTextColor.color(self.textArea.isFocused))
+  buff.writeText(self.xPos, self.yPos, charToDraw, fg = TextPanelTextColor.color(self.textArea.isActive))
   let selection = self.selection;
   if self.selection.startPos.x != -1:
     let oneLineSelection = self.yPos == selection.startPos.y and self.yPos == selection.endPos.y
@@ -348,7 +354,7 @@ proc draw(self: ref TTextDrawer, buff: var TDrawBuffer) =
     
 
 method draw*(self: PTextArea): TDrawBuffer = 
-  self.buff.setCells(0, 0, self.w, self.h, ch="", bg = TextPanelColor.color(self.isFocused))
+  self.buff.setCells(0, 0, self.w, self.h, ch="", bg = TextPanelColor.color(self.isActive))
   let drawer = createTextDrawer(self)
   drawer.draw(self.buff)
   return self.buff
@@ -1276,3 +1282,9 @@ when isMainModule:
       textArea.handleEvent(PEvent(kind: TEventKind.eventKey, key: TKey.KeyArrowLeft))
       textArea.handleEvent(PEvent(kind: TEventKind.eventKey, key: TKey.KeyArrowLeft))
       check textArea.cursorPos == (2, 0)
+
+    test "cursor up":
+      discard
+
+    test "cursor down":
+      discard
