@@ -38,7 +38,7 @@ method handleEvent*(self: PDialog, event: PEvent) =
   of TEventKind.eventGetFocus:
     let dialogJustOpened = event.sourceViewEquals(self)
     if dialogJustOpened:
-      let lastView = self.views[high(self.views)]
+      let lastView = self.topView.expect("Dialog must cotnains at least one View!")
       lastView.setFocused()
   else:
     discard

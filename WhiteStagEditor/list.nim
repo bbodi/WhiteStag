@@ -33,14 +33,14 @@ method setNode*(self: PListCellView, node: PListNode) = quit "PListCellView.setN
 proc `selectedIndex`*(self: PList): TOption[int] = self.pSelectedIndex
 
 proc changedStructure*(self: PList) = 
-  self.views = @[]
+  self.clearViews()
   self.rowCount = 0
   for cellViewIndex, node in self.nodes:
     node.list = self
     let cellView = self.cellViews[cellViewIndex]
     cellView.setNode(node)
-    inc self.rowCount
     self.addView(cellView, 0, cellViewIndex)
+    inc self.rowCount
     
 
 proc handleMouse(self: PList, event: PEvent) =
@@ -154,7 +154,7 @@ type
     node: PListNode
 
 method setNode*(self: PStringCellView, node: PListNode) = 
-  self.views = @[]
+  self.clearViews()
   self.node = node
   self.data = cast[string](node.data)
 

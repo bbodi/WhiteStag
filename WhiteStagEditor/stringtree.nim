@@ -33,7 +33,7 @@ method stringify*(self: PStringTreeCellViewFactory, data: pointer): string =
   self.stringifyMethod(data)
 
 method setNode*(self: PStringCellView, node: PTreeNode) = 
-  self.views = @[]
+  self.clearViews()
   self.node = node
     
 method name(self: PStringCellView): string = "StringCellView"

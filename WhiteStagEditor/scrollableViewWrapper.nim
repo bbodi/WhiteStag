@@ -38,8 +38,9 @@ method handleEvent*(self: PScrollableViewWrapper, event: PEvent) =
     self.modified()
     self.horizontalPos += modX
     self.verticalPos += modY
-    for view in self.views:
-      view.move(modX, modY)
+    # TODO: TView.views is private
+    #for view in self.views:
+    #  view.move(modX, modY)
     event.setProcessed()
     
 

@@ -25,7 +25,7 @@ type
 
   PView* = ref TView
   TView* = object of TObject
-    nextView, prevView: TOption[PView]
+    nextViewOpt, prevViewOpt: TOption[PView]
     rect: TRegion
     buff*: TDrawBuffer
     growMode*: set[TGrowMode]
@@ -39,7 +39,7 @@ type
     executingResult: TExecutingResult
     useClipping*: bool
     minWidth*, minHeight*: int
-    bottomView, topView: TOption[PView]
+    pBottomViewOpt, pTopViewOpt: TOption[PView]
     
     selectable: bool
 
@@ -145,10 +145,6 @@ proc h*(self: PView): int = self.rect.h
 method name*(self: PView): string = "View"
 
 proc parentsSizeChanged(self: PView, deltaW, deltaH: int)
-
-proc iterateForward(self: PView, task: proc(PView):bool) =
-  if self.bottomView == nil:
-    return
 
 proc groupOnChangeSize*(self: PView, deltaW, deltaH: int) =
   self.buff = createDrawBuffer(self.rect)
@@ -256,8 +252,12 @@ proc font*(self: PView): TFont =
     return self.pFont.expect("No parent, must exist a font!")
   return self.owner.expect("").font
 
+proc `topView`*(self: PView): TOption[PView] = self.pTopViewOpt
+
+proc `bottomView`*(self: PView): TOption[PView] = self.pBottomViewOpt
+
 proc isFocused*(self: PView): bool =
-  self.owner.isSome and self.owner.data.topView.equals(self)
+  self.owner.isSome and self.owner.data.pTopViewOpt.equals(self)
 
 proc isActive*(self: PView): bool =
   self.owner.isNone or (self.isFocused and self.owner.data.isActive)
@@ -277,9 +277,14 @@ proc groupDraw(self: PView, viewRepresentations: var TViewRepresentations) =
     return
   let buff = self.draw()
   viewRepresentations.add(self, buff)
-  if self.views != nil:
-    for child in self.views:
-      child.groupDraw(viewRepresentations)
+  # TODO: use closures! (it doesn't work currently :()
+  var childPtr = self.pBottomViewOpt
+  while childPtr.isSome:
+    childPtr.data.groupDraw(viewRepresentations)   
+    childPtr = childPtr.data.nextViewOpt
+  #if self.views != nil:
+  #  for child in self.views:
+  #    child.groupDraw(viewRepresentations)   
   self.pDirty = false
   self.hasDirtyChild = false
 
@@ -349,37 +354,37 @@ proc clickedInMe*(self: PView, event: PEvent): bool =
   return mx < self.w and my < self.h and mx >= 0 and my >= 0
 
 proc insertLast(self: PView, child: PView) =
-  if self.topView.isSome:
-    let topView = self.topView.data
-    topView.nextView = some(child)
-    child.prevView = some(topView)
-  self.topView = some(child)
+  if self.pTopViewOpt.isSome:
+    let pTopViewOpt = self.pTopViewOpt.data
+    pTopViewOpt.nextViewOpt = some(child)
+    child.prevViewOpt = some(pTopViewOpt)
+  else:
+    child.prevViewOpt = none[PView]()
+  self.pTopViewOpt = some(child)
 
-  if self.bottomView.isNone:
-    self.bottomView = some(child)
+  if self.pBottomViewOpt.isNone:
+    self.pBottomViewOpt = some(child)
+  child.nextViewOpt = none[PView]()
 
 proc removeFromLinkedList(self: PView, childToDelete: PView) =
-  let prevView = childToDelete.prevView
-  let nextView = childToDelete.nextView
-  childToDelete.prevView = none[PView]()
-  childToDelete.nextView = none[PView]()
-  if prevView.isSome:
-    prevView.data.nextView = nextView
-  if nextView.isSome:
-    nextView.data.prevView = prevView
-  if self.bottomView.equals(childToDelete):
-    self.bottomView = nextView
-  if self.topView.equals(childToDelete):
-    self.topView = prevView
+  let prevViewOpt = childToDelete.prevViewOpt
+  let nextViewOpt = childToDelete.nextViewOpt
+  childToDelete.prevViewOpt = none[PView]()
+  childToDelete.nextViewOpt = none[PView]()
+  if prevViewOpt.isSome:
+    prevViewOpt.data.nextViewOpt = nextViewOpt
+  if nextViewOpt.isSome:
+    nextViewOpt.data.prevViewOpt = prevViewOpt
+  if self.pBottomViewOpt.equals(childToDelete):
+    self.pBottomViewOpt = nextViewOpt
+  if self.pTopViewOpt.equals(childToDelete):
+    self.pTopViewOpt = prevViewOpt
 
 proc makeLast(self: PView, child: PView) =
   if self.views.len <= 1:
     return
-  if self.bottomView.equals(child):
-    self.bottomView = self.bottomView.data.nextView
-    if self.bottomView.isNone and self.views.len > 0:
-      self.bottomView = some(self.views[0])
-  self.topView = some(child)
+  self.removeFromLinkedList(child)
+  self.insertLast(child)
 
 proc makeMeLast(self: PView) =
     if self.owner.isNone:
@@ -388,8 +393,8 @@ proc makeMeLast(self: PView) =
     self.owner.data.makeMeLast()
 
 proc sendLostFocusEvent*(self: PView) =
-  self.topView.ifSome do (topView: PView):
-    topView.broadcast(PEvent(kind: TEventKind.eventLostFocus, view: cast[pointer](topView)))
+  self.pTopViewOpt.ifSome do (pTopViewOpt: PView):
+    pTopViewOpt.broadcast(PEvent(kind: TEventKind.eventLostFocus, view: cast[pointer](pTopViewOpt)))
 
   self.owner.ifSome do (parentView: PView):
      parentView.sendLostFocusEvent()
@@ -400,7 +405,6 @@ proc setMyParentsFocused(self: PView) =
     parent.makeMeLast()
     parent.setMyParentsFocused()
   
-# Unit testet arra az esetre, ha már egy fókuszált elemre kerül a fókusz
 proc setFocused*(self: PView) =
   self.makeMeLast()
   self.setMyParentsFocused()
@@ -408,31 +412,31 @@ proc setFocused*(self: PView) =
   
 
 proc changeSwapFocusedViewTo(self: PView, child: PView) =
-  self.topView.ifSome do (focusedView: PView):
+  self.pTopViewOpt.ifSome do (focusedView: PView):
     focusedView.broadcast(PEvent(kind: TEventKind.eventLostFocus, view: cast[pointer](focusedView)))
   self.broadcast(PEvent(kind: TEventKind.eventGetFocus, view: cast[pointer](child)))
   self.makeLast(child)
 
 proc selectNext*(self: PView, backward: bool = false) =
-  if self.topView.isNone:
+  if self.pTopViewOpt.isNone:
     if self.views.len == 0:
       return
     if not backward:
-      self.topView.expect("views.len > 0").setFocused()
+      self.pTopViewOpt.expect("views.len > 0").setFocused()
     else:
-      self.bottomView.expect("views.len > 0").setFocused()
+      self.pBottomViewOpt.expect("views.len > 0").setFocused()
     return
-  let focusedView = self.topView.data
+  let focusedView = self.pTopViewOpt.data
   if not backward:
-    if focusedView.nextView.isNone:
-      self.changeSwapFocusedViewTo(self.bottomView.data)
+    if focusedView.nextViewOpt.isNone:
+      self.changeSwapFocusedViewTo(self.pBottomViewOpt.data)
       return
-    self.changeSwapFocusedViewTo(focusedView.nextView.data)
+    self.changeSwapFocusedViewTo(focusedView.nextViewOpt.data)
   else:
-    if focusedView.prevView.isNone:
-      self.changeSwapFocusedViewTo(self.topView.data)
+    if focusedView.prevViewOpt.isNone:
+      self.changeSwapFocusedViewTo(self.pTopViewOpt.data)
       return
-    self.changeSwapFocusedViewTo(focusedView.prevView.data)
+    self.changeSwapFocusedViewTo(focusedView.prevViewOpt.data)
 
 proc addView*(self: PView, child: PView, x, y: int) = 
   if self.views == nil:
@@ -456,27 +460,29 @@ proc addViewAtCenterX*(self: PView, child: PView, y: int) =
   addView(self, child, center.x, y)
 
 proc removeView*(self: PView, childToDelete: PView) = 
-  let currentViewWasRemoved = self.topView.equals(childToDelete)
+  let currentViewWasRemoved = self.pTopViewOpt.equals(childToDelete)
   let index = self.views.find(childToDelete)
   doAssert(index != -1, "removeView: View doesnt exists in views")
   self.views.delete(index)
-  let prevView = childToDelete.prevView
+  let prevViewOpt = childToDelete.prevViewOpt
   self.removeFromLinkedList(childToDelete)
-  if currentViewWasRemoved and prevView.isSome:
-    prevView.data.setFocused()
+  if currentViewWasRemoved and prevViewOpt.isSome:
+    prevViewOpt.data.setFocused()
   childToDelete.owner = none[PView]()
   self.modified()
 
 proc groupHandleEvent(self: PView, event: PEvent) = 
   if self.isHidden:
     return
-  if self.views != nil:
-    let childList = self.views
-    for i in countDown(childList.high, childList.low):
-      let child = childList[i]
-      child.groupHandleEvent(event)
-      if event.kind == TEventKind.eventNothing:
+
+  # TODO: use closures instead! 
+  var childPtr = self.pTopViewOpt
+  while childPtr.isSome:
+    childPtr.data.groupHandleEvent(event)
+    if event.kind == TEventKind.eventNothing:
         break
+    childPtr = childPtr.data.prevViewOpt
+
   if event.isMouseEvent:
     if self.clickedInMe(event):
       if event.kind == TEventKind.eventMouseButtonDown:
@@ -525,9 +531,14 @@ proc getRootView(self: PView): PView =
       return parent
     parent = parent.owner.data
 
+proc clearViews*(self: PView) =
+  self.views = @[]
+  self.pTopViewOpt = none[PView]()
+  self.pBottomViewOpt = none[PView]()
+
 proc executeView*(self, view: PView, x, y: int): TExecutingResult =
   doAssert(self != view, "self.xecuteView(self)")
-  let savedFocusedView = self.topView
+  let savedFocusedView = self.pTopViewOpt
   self.addView(view, x, y)
   view.setFocused()
   view.pExecuting = true
@@ -611,6 +622,24 @@ when isMainModule:
       testDrawingOrder = nil
       testEventHandlingOrder = nil
 
+    proc checkViewOrder(v0: PView, childs: varargs[PView]) =
+      let lastChild = childs[childs.len-1]
+
+      check v0.pBottomViewOpt.data == childs[0]
+      check v0.pTopViewOpt.data == lastChild
+      check childs[0].prevViewOpt.isNone
+
+      for i, child in childs:
+        if i > 0:
+          check child.prevViewOpt.isSome
+          check child.prevViewOpt.data == childs[i-1]
+        if i < childs.len-1:
+          check child.nextViewOpt.expect($i & ". " & child.name & " nextViewOpt") == childs[i+1]
+
+      if childs.len > 1:
+        check lastChild.prevViewOpt.data == childs[childs.len-2]
+      check lastChild.nextViewOpt.isNone
+
     test "test Ref Equality":
       check v0 != v1
       let v00 = v0
@@ -630,24 +659,24 @@ when isMainModule:
       check v1.hasDirtyChild
 
     test "addView sets the child's next and prev Views":
-      check v1.prevView.isNone
-      check v1.nextView.isNone
+      check v1.prevViewOpt.isNone
+      check v1.nextViewOpt.isNone
       v0.addView(v1, 0, 0)
-      check v1.prevView.isNone
-      check v1.nextView.isNone
+      check v1.prevViewOpt.isNone
+      check v1.nextViewOpt.isNone
       v0.addView(v2, 0, 0)
-      check v1.prevView.isNone
-      check v1.nextView.equals(v2)
-      check v2.prevView.equals(v1)
-      check v2.nextView.isNone
+      check v1.prevViewOpt.isNone
+      check v1.nextViewOpt.equals(v2)
+      check v2.prevViewOpt.equals(v1)
+      check v2.nextViewOpt.isNone
 
       v0.addView(v3, 0, 0)
-      check v1.prevView.isNone
-      check v1.nextView.equals(v2)
-      check v2.prevView.equals(v1)
-      check v2.nextView.equals(v3)
-      check v3.prevView.equals(v2)
-      check v3.nextView.isNone
+      check v1.prevViewOpt.isNone
+      check v1.nextViewOpt.equals(v2)
+      check v2.prevViewOpt.equals(v1)
+      check v2.nextViewOpt.equals(v3)
+      check v3.prevViewOpt.equals(v2)
+      check v3.nextViewOpt.isNone
       
 
     test "setWidthHeight changes the Buffer size as well":
@@ -672,28 +701,28 @@ when isMainModule:
       v0.addView(v2, 0, 0)
       v0.addView(v3, 0, 0)
       check v0.views.len == 3
-      check v0.bottomView.equals(v1)
-      check v0.topView.equals(v3)
+      check v0.pBottomViewOpt.equals(v1)
+      check v0.pTopViewOpt.equals(v3)
       v0.removeView(v3)
       check v0.views.len == 2
-      check v0.topView.equals(v2)
-      check v0.bottomView.equals(v1)
+      check v0.pTopViewOpt.equals(v2)
+      check v0.pBottomViewOpt.equals(v1)
       check v3.owner.isNone
       check v0.dirty
 
       v0.settingDirtyToFalseForTestingPurposes
       v0.removeView(v2)
       check v0.views.len == 1
-      check v0.topView.equals(v1)
-      check v0.bottomView.equals(v1)
+      check v0.pTopViewOpt.equals(v1)
+      check v0.pBottomViewOpt.equals(v1)
       check v2.owner.isNone
       check v0.dirty
 
       v0.settingDirtyToFalseForTestingPurposes
       v0.removeView(v1)
       check v0.views.len == 0
-      check v0.topView.isNone
-      check v0.bottomView.isNone
+      check v0.pTopViewOpt.isNone
+      check v0.pBottomViewOpt.isNone
       check v1.owner.isNone
       check v0.dirty
 
@@ -702,38 +731,38 @@ when isMainModule:
       v0.addView(v2, 0, 0)
       v0.addView(v3, 0, 0)
       v0.removeView(v2)
-      check v1.prevView.isNone
-      check v1.nextView.equals(v3)
-      check v2.prevView.isNone
-      check v2.nextView.isNone
-      check v3.prevView.equals(v1)
-      check v3.nextView.isNone
+      check v1.prevViewOpt.isNone
+      check v1.nextViewOpt.equals(v3)
+      check v2.prevViewOpt.isNone
+      check v2.nextViewOpt.isNone
+      check v3.prevViewOpt.equals(v1)
+      check v3.nextViewOpt.isNone
 
       v0.removeView(v1)
-      check v1.prevView.isNone
-      check v1.nextView.isNone
-      check v3.prevView.isNone
-      check v3.nextView.isNone
+      check v1.prevViewOpt.isNone
+      check v1.nextViewOpt.isNone
+      check v3.prevViewOpt.isNone
+      check v3.nextViewOpt.isNone
 
     test "removing last view":
       v0.addView(v1, 0, 0)
       check(1 == v0.views.len)
       v0.removeView(v1)
-      check v0.topView.isNone
-      check v0.bottomView.isNone
+      check v0.pTopViewOpt.isNone
+      check v0.pBottomViewOpt.isNone
       check v0.views.len == 0
-      check v0.topView.isNone
+      check v0.pTopViewOpt.isNone
 
     test "removing Focused view":
       v0.addView(v1, 0, 0)
       check(1 == v0.views.len)
       v1.setFocused()
-      check v0.topView.equals(v1)
+      check v0.pTopViewOpt.equals(v1)
       v0.removeView(v1)
-      check v0.topView.isNone
-      check v0.bottomView.isNone
+      check v0.pTopViewOpt.isNone
+      check v0.pBottomViewOpt.isNone
       check v0.views.len == 0
-      check v0.topView.isNone
+      check v0.pTopViewOpt.isNone
 
     test "makeLast":
       v0.addView(v1, 0, 0)
@@ -741,14 +770,14 @@ when isMainModule:
       check(2 == v0.views.len)
       check(v1 == v0.views[0])
       check(v2 == v0.views[1])
-      check v0.bottomView.equals(v1)
-      check v0.topView.equals(v2)
+      check v0.pBottomViewOpt.equals(v1)
+      check v0.pTopViewOpt.equals(v2)
       v0.makeLast(v1)
       check(2 == v0.views.len)
       check(v1 == v0.views[0])
       check(v2 == v0.views[1])
-      check v0.topView.equals(v1)
-      check v0.bottomView.equals(v2)
+      check v0.pTopViewOpt.equals(v1)
+      check v0.pBottomViewOpt.equals(v2)
 
     test "makeMeLast":
       v0.addView(v1, 0, 0)
@@ -762,10 +791,10 @@ when isMainModule:
 
       check( 1 == v1.views.len)
       check(v3 == v1.views[0])
-      check v0.bottomView.equals(v1)
-      check v0.topView.equals(v2)
-      check v1.bottomView.equals(v3)
-      check v1.topView.equals(v3)
+      check v0.pBottomViewOpt.equals(v1)
+      check v0.pTopViewOpt.equals(v2)
+      check v1.pBottomViewOpt.equals(v3)
+      check v1.pTopViewOpt.equals(v3)
       v1.makeMeLast()
       check( 2 == v0.views.len)
       check(v1 == v0.views[0]) 
@@ -773,10 +802,10 @@ when isMainModule:
 
       check( 1 == v1.views.len)
       check(v3 == v1.views[0])
-      check v0.bottomView.equals(v2)
-      check v0.topView.equals(v1)
-      check v1.bottomView.equals(v3)
-      check v1.topView.equals(v3)
+      check v0.pBottomViewOpt.equals(v2)
+      check v0.pTopViewOpt.equals(v1)
+      check v1.pBottomViewOpt.equals(v3)
+      check v1.pTopViewOpt.equals(v3)
 
       v3.makeMeLast()
       check( 2 == v0.views.len)
@@ -785,10 +814,10 @@ when isMainModule:
 
       check( 1 == v1.views.len)
       check(v3 == v1.views[0])
-      check v0.bottomView.equals(v2)
-      check v0.topView.equals(v1)
-      check v1.bottomView.equals(v3)
-      check v1.topView.equals(v3)
+      check v0.pBottomViewOpt.equals(v2)
+      check v0.pTopViewOpt.equals(v1)
+      check v1.pBottomViewOpt.equals(v3)
+      check v1.pTopViewOpt.equals(v3)
 
     test "setCurrentView":
       v0.addView(v1, 0, 0)
@@ -880,10 +909,10 @@ when isMainModule:
 
       check( 1 == v1.views.len)
       check(v3 == v1.views[0])
-      check v0.bottomView.equals(v2)
-      check v0.topView.equals(v1)
-      check v1.bottomView.equals(v3)
-      check v1.topView.equals(v3)
+      check v0.pBottomViewOpt.equals(v2)
+      check v0.pTopViewOpt.equals(v1)
+      check v1.pBottomViewOpt.equals(v3)
+      check v1.pTopViewOpt.equals(v3)
 
 
       v3.setFocused()
@@ -893,10 +922,10 @@ when isMainModule:
 
       check( 1 == v1.views.len)
       check(v3 == v1.views[0])
-      check v0.bottomView.equals(v2)
-      check v0.topView.equals(v1)
-      check v1.bottomView.equals(v3)
-      check v1.topView.equals(v3)
+      check v0.pBottomViewOpt.equals(v2)
+      check v0.pTopViewOpt.equals(v1)
+      check v1.pBottomViewOpt.equals(v3)
+      check v1.pTopViewOpt.equals(v3)
 
     test "setFocused make all the hierarchy focused":
       v0.addView(v1, 0, 0)
@@ -1053,9 +1082,6 @@ when isMainModule:
         for i, event in testView.events[0..2]:
           check(event.kind == TEventKind.eventLostFocus)
           check(event.sourceViewEquals(viewsThatLostTheirFocus[i]))
-        #let event = testView.events[0]
-        #check(event.kind == TEventKind.eventLostFocus)
-        #check(event.sourceViewEquals(viewThatLostCurrentState))
           
 
       checkViewsGotTheRightEvents(testv3)
@@ -1165,35 +1191,35 @@ when isMainModule:
       win.addView(testv1, 0, 0)
       win.addView(testv2, 0, 0)
 
-      proc checkViewOrder(bottom, top: PView) =
-        check testv0.prevView.isNone
-        check testv0.nextView.data == testv1
-        check testv1.prevView.data == testv0
-        check testv1.nextView.data == testv2
-        check testv2.prevView.data == testv1
-        check testv2.nextView.isNone
-
-        check win.bottomView.data == bottom
-        check win.topView.data == top
-
-      check testv2.isFocused
-      checkViewOrder(testv0, testv2)
+      check v0.isFocused == false
+      check v1.isFocused == false
+      check v2.isFocused
+      checkViewOrder(win, v0, v1, v2)
 
       win.selectNext()
       check testv0.isFocused
-      checkViewOrder(testv1, testv0)
+      check v0.isFocused
+      check v1.isFocused == false
+      check v2.isFocused == false
+      checkViewOrder(win, v1, v2, v0)
 
       win.selectNext()
-      check testv1.isFocused
-      checkViewOrder(testv2, testv1)
+      check v0.isFocused == false
+      check v1.isFocused
+      check v2.isFocused == false
+      checkViewOrder(win, v2, v0, v1)
 
       win.selectNext()
-      check testv2.isFocused
-      checkViewOrder(testv0, testv2)
+      check v0.isFocused == false
+      check v1.isFocused == false
+      check v2.isFocused
+      checkViewOrder(win, v0, v1, v2)
 
       win.selectNext(backward = true)
-      check testv1.isFocused
-      checkViewOrder(testv0, testv1)
+      check v0.isFocused == false
+      check v1.isFocused
+      check v2.isFocused == false
+      checkViewOrder(win, v0, v2, v1)
 
     test "drawing order":
       v0.addView(v1, 0, 0)
@@ -1201,11 +1227,17 @@ when isMainModule:
       v1.addView(v5, 0, 0)
       v2.addView(v3, 0, 0)
       v2.addView(v4, 0, 0)
+      checkViewOrder(v0, v1, v2)
+      checkViewOrder(v1, v5)
+      checkViewOrder(v2, v3, v4)
       var regions = TViewRepresentations(representations: @[])
       v0.groupDraw(regions)
       check testDrawingOrder == "v0, v1, v5, v2, v3, v4"
 
       v5.setFocused()
+      checkViewOrder(v0, v2, v1)
+      checkViewOrder(v1, v5)
+      checkViewOrder(v2, v3, v4)
       testDrawingOrder = nil
       v0.groupDraw(regions)
       check testDrawingOrder == "v0, v2, v3, v4, v1, v5"
@@ -1221,15 +1253,31 @@ when isMainModule:
       v1.addView(v5, 0, 0)
       v2.addView(v3, 0, 0)
       v2.addView(v4, 0, 0)
-      v0.groupHandleEvent(PEvent())
+      v0.groupHandleEvent(PEvent(kind: eventResize))
       check testEventHandlingOrder == "v4, v3, v2, v5, v1, v0"
 
       v5.setFocused()
       testEventHandlingOrder = nil
-      v0.groupHandleEvent(PEvent())
-      check testEventHandlingOrder == "v5, v1, v3, v4, v2, v0"
+      v0.groupHandleEvent(PEvent(kind: eventResize))
+      check testEventHandlingOrder == "v5, v1, v4, v3, v2, v0"
 
       v3.setFocused()
       testEventHandlingOrder = nil
-      v0.groupHandleEvent(PEvent())
+      v0.groupHandleEvent(PEvent(kind: eventResize))
       check testEventHandlingOrder == "v3, v4, v2, v5, v1, v0"
+
+    test "prev and next ptr are configured properly for newly added Views":
+      v1.prevViewOpt = some(v3)
+      v1.nextViewOpt = some(v4)
+      v0.addView(v1, 0, 0)
+      check v1.prevViewOpt.isNone
+      check v1.prevViewOpt.isNone
+
+    test "clearViews deletes all information about their child":
+      v0.addView(v1, 0, 0)
+      v0.addView(v2, 0, 0)
+      v0.addView(v3, 0, 0)
+      v0.clearViews()
+      check v0.bottomView.isNone
+      check v0.topView.isNone
+      check v0.views.len == 0

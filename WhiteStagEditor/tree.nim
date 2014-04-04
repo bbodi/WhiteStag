@@ -77,7 +77,7 @@ proc assignCellViewsToNodes(self: PTree, node: PTreeNode, cellViewIndex, ident: 
   return nextIndex
 
 proc changedStructure*(self: PTree) = 
-  self.views = @[]
+  self.clearViews()
   self.pRowCount = 0
   self.skippedNodes = 0
   if self.pRootNode.isNone:
@@ -291,7 +291,7 @@ when isMainModule:
       identAtSetup: int
 
   method setNode*(self: PTestTreeCellView, node: PTreeNode) = 
-    self.views = @[]
+    self.clearViews()
     self.node = node
     self.identAtSetup = self.ident
 
