@@ -34,7 +34,7 @@ type
     pExecuting: bool
     hasDirtyChild: bool
     pHidden: bool
-    views*: seq[PView]
+    views: seq[PView]
     pFont: TOption[TFont]
     executingResult: TExecutingResult
     useClipping*: bool
@@ -145,6 +145,10 @@ proc h*(self: PView): int = self.rect.h
 method name*(self: PView): string = "View"
 
 proc parentsSizeChanged(self: PView, deltaW, deltaH: int)
+
+proc iterateForward(self: PView, task: proc(PView):bool) =
+  if self.bottomView == nil:
+    return
 
 proc groupOnChangeSize*(self: PView, deltaW, deltaH: int) =
   self.buff = createDrawBuffer(self.rect)
@@ -558,12 +562,24 @@ method readData(self: PTestView, stream: PStringStream) = discard
 
 method name(self: PTestView): string = "PTestView(" & self.name & ")"
 
+var testDrawingOrder: string
+var testEventHandlingOrder: string
+
 method handleEvent(self: PTestView, event: PEvent) =
+  if testEventHandlingOrder == nil:
+    testEventHandlingOrder = self.name
+  else:
+    testEventHandlingOrder &= ", " & self.name
   if not self.recordingEvents:
     return
   self.events.add(event)
 
-method draw*(self: PTestView): TDrawBuffer = discard
+method draw*(self: PTestView): TDrawBuffer = 
+  if testDrawingOrder == nil:
+    testDrawingOrder = self.name
+  else:
+    testDrawingOrder &= ", " & self.name
+  return TDrawBuffer()
 
 proc startRecordingEvents*(self: PTestView) = self.recordingEvents = true
 proc stopRecordingEvents*(self: PTestView) = self.recordingEvents = false
@@ -579,18 +595,21 @@ when isMainModule:
 
   suite "View Test Suite":
     setup:
-      var testv0 = PTestView(name: "testv0", events : @[], recordingEvents : false)
-      var testv1 = PTestView(name: "testv1", events : @[], recordingEvents : false)
-      var testv2 = PTestView(name: "testv2", events : @[], recordingEvents : false)
-      var testv3 = PTestView(name: "testv3", events : @[], recordingEvents : false)
-      var testv4 = PTestView(name: "testv4", events : @[], recordingEvents : false)
-      var testv5 = PTestView(name: "testv5", events : @[], recordingEvents : false)
+      var drawList: seq[PView] = @[]
+      var testv0 = PTestView(name: "v0", events: @[], recordingEvents: false)
+      var testv1 = PTestView(name: "v1", events: @[], recordingEvents: false)
+      var testv2 = PTestView(name: "v2", events: @[], recordingEvents: false)
+      var testv3 = PTestView(name: "v3", events: @[], recordingEvents: false)
+      var testv4 = PTestView(name: "v4", events: @[], recordingEvents: false)
+      var testv5 = PTestView(name: "v5", events: @[], recordingEvents: false)
       var v0: PView = testv0
       var v1: PView = testv1
       var v2: PView = testv2
       var v3: PView = testv3
       var v4: PView = testv4
       var v5: PView = testv5
+      testDrawingOrder = nil
+      testEventHandlingOrder = nil
 
     test "test Ref Equality":
       check v0 != v1
@@ -1141,7 +1160,7 @@ when isMainModule:
       check v0.h == 2
 
     test "selectNext":
-      let win = PTestView()
+      let win = PTestView(name: "win")
       win.addView(testv0, 0, 0)
       win.addView(testv1, 0, 0)
       win.addView(testv2, 0, 0)
@@ -1176,5 +1195,41 @@ when isMainModule:
       check testv1.isFocused
       checkViewOrder(testv0, testv1)
 
-    # TODO: jó sorrendben rajzolódnak ki
-    # TODO: jó sorrendben kezelik le az eseményeket
+    test "drawing order":
+      v0.addView(v1, 0, 0)
+      v0.addView(v2, 0, 0)
+      v1.addView(v5, 0, 0)
+      v2.addView(v3, 0, 0)
+      v2.addView(v4, 0, 0)
+      var regions = TViewRepresentations(representations: @[])
+      v0.groupDraw(regions)
+      check testDrawingOrder == "v0, v1, v5, v2, v3, v4"
+
+      v5.setFocused()
+      testDrawingOrder = nil
+      v0.groupDraw(regions)
+      check testDrawingOrder == "v0, v2, v3, v4, v1, v5"
+
+      v3.setFocused()
+      testDrawingOrder = nil
+      v0.groupDraw(regions)
+      check testDrawingOrder == "v0, v1, v5, v2, v4, v3"
+
+    test "event handling order":
+      v0.addView(v1, 0, 0)
+      v0.addView(v2, 0, 0)
+      v1.addView(v5, 0, 0)
+      v2.addView(v3, 0, 0)
+      v2.addView(v4, 0, 0)
+      v0.groupHandleEvent(PEvent())
+      check testEventHandlingOrder == "v4, v3, v2, v5, v1, v0"
+
+      v5.setFocused()
+      testEventHandlingOrder = nil
+      v0.groupHandleEvent(PEvent())
+      check testEventHandlingOrder == "v5, v1, v3, v4, v2, v0"
+
+      v3.setFocused()
+      testEventHandlingOrder = nil
+      v0.groupHandleEvent(PEvent())
+      check testEventHandlingOrder == "v3, v4, v2, v5, v1, v0"

@@ -31,7 +31,7 @@ method handleEvent*(self: PDesktop, event: PEvent) =
   self.app.handleEvent(event)
   case event.kind:
   of TEventKind.eventCommand:
-    if event.cmd == cmdQuit or event.cmd == cmdCancel:
+    if event.cmd == cmdQuit:
       self.stopExecuting(cmdCancel)
   of TEventKind.eventWindowResized:
     let newSize = self.makeLocal(event.newWidth, event.newHeight)

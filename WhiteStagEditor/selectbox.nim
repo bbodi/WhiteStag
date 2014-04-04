@@ -18,7 +18,7 @@ type
     childBox: PSelectBox
     rootBox: PSelectBox
 
-  TSelectBoxItemDrawerFunc* = proc(data: pointer, box: PSelectBox, index: int, buff: var TDrawBuffer)
+  TSelectBoxItemDrawerFunc* = proc(data: pointer, box: TOption[PSelectBox], index: int, buff: var TDrawBuffer)
   TSelectBoxItemWidthFunc* = proc(data: pointer): int
   # TODO: ha működik majd a method -s típussal, akkor írd vissza
   PSelectBox* = ref TSelectBox
@@ -113,10 +113,18 @@ method handleEvent(self: PSelectBox, event: PEvent) =
   else:
     discard
 
+proc drawItemTo*(self: PSelectBox, data: pointer, buff: var TDrawBuffer) = 
+  self.selectBoxItemDrawerFunc(data, none[PSelectBox](), 0, buff)
+
+proc getItem*(self: PSelectBox, index: int): pointer = self.items[index].data
+
+proc getItemWidth*(self: PSelectBox, data: pointer): int =
+  result = self.selectBoxItemWidthFunc(data)
+
 method draw(self: PSelectBox): TDrawBuffer = 
   self.frame.draw(self, self.buff)
   for i, item in self.items:
-    self.selectBoxItemDrawerFunc(item.data, self, i, self.buff)
+    self.selectBoxItemDrawerFunc(item.data, some(self), i, self.buff)
   return self.buff
 
 proc createSelectBox*(title: string, 
@@ -176,14 +184,16 @@ proc selectBoxStringItemWidth(data: pointer): int =
   cast[string](data).len + 2
 
 
-proc selectBoxStringItemDrawer(data: pointer, box: PSelectBox, index: int, buff: var TDrawBuffer) =
+proc selectBoxStringItemDrawer(data: pointer, box: TOption[PSelectBox], index: int, buff: var TDrawBuffer) =
   let bg = 
-    if box.selectedIndex == index:
+    if box.isSome and box.data.selectedIndex == index:
       ColorRed
+    elif box.isSome:
+      FrameColor.color(box.data.isFocused)
     else:
-      FrameColor.color(box.isFocused)
+      FrameColor.color(false)
   let text = cast[string](data)
-  let y = if box.frame.hasBorder: index+1 else: index
+  let y = if box.isSome and box.data.frame.hasBorder: index+1 else: index
   buff.writeText(1, y, text, bg = bg)
 
 proc createStringSelectBox*(title: string, hasBorder: bool = true): PSelectBox = createSelectBox(title, selectBoxStringItemWidth, selectBoxStringItemDrawer, hasBorder)

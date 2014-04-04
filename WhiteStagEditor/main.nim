@@ -7,6 +7,7 @@ import colors
 import sdl_ttf
 import desktop
 import selectbox
+import combobox
 import event
 import scrollableViewWrapper
 import scrollbar
@@ -73,8 +74,10 @@ checkBoxGrp2.addItem("Kettő")
 checkBoxGrp2.addItem("Három")
 
 
+
 var sb = createStringSelectBox("Árvíztűrő furógép")
-discard sb.addItem("Exit", cmdCancel)
+discard sb.addItem("1", cmdOk)
+discard sb.addItem("Exit", cmdQuit)
 let item = sb.addItem("2", cmdOk)
 let item2 = item.addItem("3", cmdOk)
 discard item.addItem("4", cmdOk)
@@ -83,6 +86,8 @@ discard item.addItem("6", cmdOk)
 discard item.addItem("7", cmdOk)
 discard item2.addItem("8", cmdOk)
 discard item2.addItem("9", cmdOk)
+
+var cb = createComboBox(sb)
 
 
 var btn1 = createButton("Hello", TCmd("Hello"))
@@ -110,7 +115,7 @@ win2.addView(checkBoxGrp2, 14, 6)
 deskt.addView(createTextField(10), 3, 1)
 
 deskt.addView(win1, 7, 12)
-deskt.addView(sb, 5, 6)
+deskt.addView(cb, 5, 6)
 deskt.addView(win2, 30, 5)
 
 win1.addView(tree1, 1, 1)

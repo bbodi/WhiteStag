@@ -76,6 +76,11 @@ proc clearCells*(self: var TDrawBuffer, x, y, w, h :int) =
     for ix in 0..w-1:
       self.clearCell(x+ix, y+iy)
 
+proc clear*(self: var TDrawBuffer) = 
+  for iy in 0.. <self.w:
+    for ix in 0.. <self.h:
+      self.clearCell(ix, iy)
+
 proc writeText*(self: var TDrawBuffer, x, y: int, text: string, 
   fg: TColor = ColorNone, bg: TColor = ColorNone, styles: set[TTextStyle] = {}) = 
   var i = 0
