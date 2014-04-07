@@ -35,7 +35,6 @@ method handleEvent*(self: PDesktop, event: PEvent) =
       self.stopExecuting(cmdCancel)
   of TEventKind.eventWindowResized:
     let newSize = self.makeLocal(event.newWidth, event.newHeight)
-    echo(repr(newSize))
     self.setWidthHeight(newSize.x, newSize.y)
     self.modified()
   else:

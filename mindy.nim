@@ -20,11 +20,35 @@ import WhiteStagEditor/list
 import WhiteStagEditor/textarea
 import WhiteStagEditor/panel
 import WhiteStagEditor/combobox
+import WhiteStagEditor/utfstring
 
 type
-  TMindy* = object of TApplication
+  TQuestionKind = enum
+    qtypeAnd
+    qtypeOr
+    qtypeContains
+    qtypeControlledSkipping
+    qtypeRandomSkipping
+    qtypeTrueFalse
+    qtypeMirror
   TQuestion = object
-    problemStatement: string
+    kind: TQuestionKind
+    problemStatement: PUTFString
+    answers: seq[PUTFString]
+    f: float
+    explanation: PUTFString
+    tag: PUTFString
+
+  TQuestionUi = object of TObject
+  TAndOrContainsQuestionUi = object of TQuestionUi
+    problemStatementTextArea: PTextArea
+    inputFields: seq[PTextArea]
+    qtypeRadioGrp: PCheckboxGroup
+
+  TMindy* = object of TApplication
+    currentQuestionUi: ref TQuestionUi
+    question: ref TQuestion
+
 
 const
   chooseTypeAndOrContainsCmd = TCmd("chooseTypeAndOrContainsCmd")
@@ -38,46 +62,23 @@ const
   cmdEditQuestionCancel = TCmd("cmdEditQuestionCancel")
   cmdEditQuestionHistory = TCmd("cmdEditQuestionHistory")
 
-  selectQuestionTypeCmd = TCmd("selectQuestionTypeCmd")
+  cmdChangeQuestionType = TCmd("cmdChangeQuestionType")
   W = 80
   H = 40
 
 
-var questionEditorWindow = createWindow(W - 5, H - 5, "Adding new question")
-questionEditorWindow.closeable = false
-questionEditorWindow.resizable = true
-questionEditorWindow.growMode = {}
+method fillEditorPanel(self: ref TQuestionUi, panel: PPanel, question: ref TQuestion) = quit "to override!"
+method createQuestionFromInput(self: ref TQuestionUi): ref TQuestion = quit "to override!"
 
-var questionTypeSelectBox = createStringSelectBox("Type")
-discard questionTypeSelectBox.addItem("And, Or, Contains", cmdOk)
-discard questionTypeSelectBox.addItem("Controlled skipping", cmdOk)
-discard questionTypeSelectBox.addItem("Random skipping", cmdOk)
-discard questionTypeSelectBox.addItem("True-false", cmdOk)
-discard questionTypeSelectBox.addItem("Mirror", cmdOk)
+method fillEditorPanel(self: ref TAndOrContainsQuestionUi, panel: PPanel, question: ref TQuestion) =
+  self.qtypeRadioGrp = createRadioGroupWithoutFrame()
+  self.qtypeRadioGrp.addItem("And")
+  self.qtypeRadioGrp.addItem("Or")
+  self.qtypeRadioGrp.addItem("Contains")
+  panel.addView(self.qtypeRadioGrp, panel.w - 2 - self.qtypeRadioGrp.w, 0)
 
-var typeButton = createButton("And, Or, Contains", selectQuestionTypeCmd)
-questionEditorWindow.addView(typeButton, 3, 1)
-
-var okBtn = createButton("Ok", cmdEditQuestionOk)
-var explBtn = createButton("Magyarázat", cmdEditQuestionExpl)
-var cancelBtn = createButton("Mégse", cmdEditQuestionCancel)
-var historyBtn = createButton("Előzmények", cmdEditQuestionHistory)
-questionEditorWindow.addView(okBtn, 3, questionEditorWindow.h - 3)
-questionEditorWindow.addView(explBtn, okBtn.x + okBtn.w + 2, questionEditorWindow.h - 3)
-questionEditorWindow.addView(cancelBtn, explBtn.x + explBtn.w + 2, questionEditorWindow.h - 3)
-questionEditorWindow.addView(historyBtn, cancelBtn.x + cancelBtn.w + 2, questionEditorWindow.h - 3)
-
-
-proc fillAndOrContainsPanel(panel: PPanel, question: ref TQuestion) =
-  let radioGrp = createRadioGroupWithoutFrame()
-  radioGrp.addItem("And")
-  radioGrp.addItem("Or")
-  radioGrp.addItem("Contains")
-  panel.addView(radioGrp, panel.w - 2 - radioGrp.w, 0)
-
-
-  let problemStatementTextArea = createTextArea(panel.w - 2 - radioGrp.w - 2, 10)
-  panel.addView(problemStatementTextArea, 0, 0)
+  self.problemStatementTextArea = createTextArea(panel.w - 2 - self.qtypeRadioGrp.w - 2, 10)
+  panel.addView(self.problemStatementTextArea, 0, 0)
   
   var inputFieldsPanel = createPanel(30, 5)
   let inputW = panel.w div 2 - 4
@@ -94,8 +95,67 @@ proc fillAndOrContainsPanel(panel: PPanel, question: ref TQuestion) =
   inputFieldsPanel.addView(input3, 4 + inputW, 0)
   inputFieldsPanel.addView(input4, 4 + inputW, 2)
   inputFieldsPanel.addView(input5, 4 + inputW, 4)
+  self.inputFields = @[]
+  self.inputFields.add(input0)
+  self.inputFields.add(input1)
+  self.inputFields.add(input2)
+  self.inputFields.add(input3)
+  self.inputFields.add(input4)
+  self.inputFields.add(input5)
 
   panel.addView(inputFieldsPanel, 2, 15)
+
+  if question != nil:
+    for i, answer in question.answers:
+      self.inputFields[i].text = $answer
+    self.problemStatementTextArea.text = $question.problemStatement
+    self.qtypeRadioGrp.selectItem(int(question.kind))
+
+  self.problemStatementTextArea.setFocused()
+
+method createQuestionFromInput(self: ref TAndOrContainsQuestionUi): ref TQuestion = 
+  result = new TQuestion
+  result.problemStatement = self.problemStatementTextArea.utftext
+  case cast[string](self.qtypeRadioGrp.data):
+  of "And": 
+    result.kind = qtypeAnd
+  of "Or": 
+    result.kind = qtypeOr
+  of "Contains": 
+    result.kind = qtypeContains
+  result.answers = @[]
+  for inputField in self.inputFields:
+    let text = inputField.utftext
+    if text.len == 0:
+      continue
+    result.answers.add(text)
+
+
+var questionPanel: PPanel
+var questionEditorWindow = createWindow(W - 5, H - 5, "Adding new question")
+questionEditorWindow.closeable = false
+questionEditorWindow.resizable = true
+questionEditorWindow.growMode = {}
+
+var questionTypeSelectBox = createStringSelectBox("Type")
+discard questionTypeSelectBox.addItem("And, Or, Contains", cmdChangeQuestionType)
+discard questionTypeSelectBox.addItem("Controlled skipping", cmdChangeQuestionType)
+discard questionTypeSelectBox.addItem("Random skipping", cmdChangeQuestionType)
+discard questionTypeSelectBox.addItem("True-false", cmdChangeQuestionType)
+discard questionTypeSelectBox.addItem("Mirror", cmdChangeQuestionType)
+var questionTypeComboBox = createComboBox("Type", questionTypeSelectBox)
+
+questionEditorWindow.addView(questionTypeComboBox, 3, 1)
+
+var okBtn = createButton("Ok", cmdEditQuestionOk)
+var explBtn = createButton("Magyarázat", cmdEditQuestionExpl)
+var cancelBtn = createButton("Mégse", cmdEditQuestionCancel)
+var historyBtn = createButton("Előzmények", cmdEditQuestionHistory)
+questionEditorWindow.addView(okBtn, 3, questionEditorWindow.h - 3)
+questionEditorWindow.addView(explBtn, okBtn.x + okBtn.w + 2, questionEditorWindow.h - 3)
+questionEditorWindow.addView(cancelBtn, explBtn.x + explBtn.w + 2, questionEditorWindow.h - 3)
+questionEditorWindow.addView(historyBtn, cancelBtn.x + cancelBtn.w + 2, questionEditorWindow.h - 3)
+
 
 
 var menuWindow = createWindow(35, 10, "Projects")
@@ -128,6 +188,11 @@ menuWindow.addViewAtCenter(exitButton, 2)
 
 discard deskt.execute()
 
+proc addQuestionPanel(self: ref TMindy) = 
+  questionPanel = createPanel(questionEditorWindow.w-2, questionEditorWindow.h - 3 - 5)
+  self.currentQuestionUi.fillEditorPanel(questionPanel, self.question)
+  questionEditorWindow.addView(questionPanel, 1, 3)
+
 method handleEvent(self: ref TMindy, event: PEvent) = 
   case event.kind:
   of TEventKind.eventCommand:
@@ -139,13 +204,26 @@ method handleEvent(self: ref TMindy, event: PEvent) =
       menuWindow.modified()
     of TCmd("addNewQuestion"):
       deskt.addViewAtCenter(questionEditorWindow)
-    of selectQuestionTypeCmd:
-      let questionType = cast[string](questionEditorWindow.executeView(questionTypeSelectBox, typeButton.x, typeButton.y).data)
-      typeButton.label = questionType
-      let andOrContainsPanel = createPanel(questionEditorWindow.w-2, questionEditorWindow.h - 3 - 5)
-      fillAndOrContainsPanel(andOrContainsPanel, nil)
-      questionEditorWindow.addView(andOrContainsPanel, 1, 3)
+      if self.question != nil:
+        case self.question.kind:
+        of qtypeAnd, qtypeOr, qtypeContains:
+          self.currentQuestionUi = new TAndOrContainsQuestionUi 
+          self.addQuestionPanel() 
+        else:
+          discard
+    of cmdChangeQuestionType:
+      let questionType = cast[string](questionTypeComboBox.data)
+      case questionType:
+      of "And, Or, Contains":
+        self.currentQuestionUi = new TAndOrContainsQuestionUi
+
+      self.addQuestionPanel() 
     of cmdEditQuestionCancel:
+      questionEditorWindow.removeView(questionPanel)
+      deskt.removeView(questionEditorWindow)
+    of cmdEditQuestionOk:
+      self.question = self.currentQuestionUi.createQuestionFromInput()
+      questionEditorWindow.removeView(questionPanel)
       deskt.removeView(questionEditorWindow)
   else:
     discard

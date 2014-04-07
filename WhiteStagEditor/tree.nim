@@ -230,7 +230,6 @@ method draw(self: PTree): TDrawBuffer =
   return self.buff
 
 proc remove*(self: PTreeNode) =
-  echo repr(self)
   if self.parentNode != nil:
     let index = self.parentNode.children.find(self)
     doAssert(index != -1, "removing a node: the node does not belong to his parent")

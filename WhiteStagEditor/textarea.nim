@@ -88,6 +88,9 @@ proc `text`*(self: PTextArea): string =
       result &= "\n"
     result &= line
 
+proc `utftext`*(self: PTextArea): PUTFString =
+  result = newString(self.text)
+
 method writeData*(self: PTextArea, stream: PStream) = 
   let copy = self.text
   stream.write(cast[int32](copy))

@@ -16,6 +16,7 @@ type
     selectedIndex: int
     items: seq[pointer]
     itemDrawer*: PItemDrawer
+    data*: pointer
 
 proc drawItem*(self: PCheckboxGroup, item: pointer, index: int, buff: var TDrawBuffer) = 
   let selected = index == self.selectedIndex
@@ -30,19 +31,24 @@ proc getClickedItemIndex(self: PCheckboxGroup, mouseY: int): int =
 proc handleMouse(self: PCheckboxGroup, event: PEvent) =
   discard
 
+proc selectItem*(self: PCheckboxGroup, index: int) =
+  self.selectedIndex = index
+  self.data = self.items[index]
+  self.modified()
+
 proc handleKey*(self: PCheckboxGroup, event: PEvent) =
   case event.key:  
   of TKey.KeyArrowDown:
-    self.selectedIndex += 1
-    if self.selectedIndex >= self.items.len:
-      self.selectedIndex = 0
-    self.modified()
+    if self.selectedIndex == self.items.len - 1:
+      self.selectItem(0)
+    else:
+      self.selectItem(self.selectedIndex + 1)
     event.setProcessed()
   of TKey.KeyArrowUp:
-    self.selectedIndex -= 1
-    if self.selectedIndex < 0:
-      self.selectedIndex = self.items.len-1
-    self.modified()
+    if self.selectedIndex == 0:
+      self.selectItem(self.items.len-1)
+    else:
+      self.selectItem(self.selectedIndex - 1)
     event.setProcessed()
   of TKey.KeyEsc:
     discard
@@ -56,9 +62,8 @@ method handleEvent*(self: PCheckboxGroup, event: PEvent) =
   of TEventKind.eventMouseButtonDown:
     if event.local:
       let selectedIndex = self.getClickedItemIndex(event.localMouseY)
-      self.selectedIndex = selectedIndex
+      self.selectItem(selectedIndex)
       event.setProcessed()
-      self.modified()
       
   of TEventKind.eventKey:
     self.handleKey(event)

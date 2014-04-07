@@ -96,7 +96,7 @@ proc taskToStrFunc*(task: PTask): string =
 method stringify*(self: PTaskTreeCellViewFactory, data: pointer): string =  taskToStrFunc(cast[PTask](data))
 
 method setNode*(self: PTaskCellView, node: PTreeNode) = 
-  self.views = @[]
+  self.clearViews()
   self.node = node
   self.task = cast[PTask](node.data)
   let task = self.task
