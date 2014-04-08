@@ -21,6 +21,7 @@ import WhiteStagEditor/textarea
 import WhiteStagEditor/panel
 import WhiteStagEditor/combobox
 import WhiteStagEditor/utfstring
+import WhiteStagEditor/label
 
 type
   TQuestionKind = enum
@@ -63,6 +64,7 @@ const
   cmdEditQuestionHistory = TCmd("cmdEditQuestionHistory")
 
   cmdChangeQuestionType = TCmd("cmdChangeQuestionType")
+  cmdTagChoosed = TCmd("cmdTagChoosed")
   W = 80
   H = 40
 
@@ -147,14 +149,23 @@ var questionTypeComboBox = createComboBox("Type", questionTypeSelectBox)
 
 questionEditorWindow.addView(questionTypeComboBox, 3, 1)
 
+var tagInputField = createTextArea(10, 1)
+var tagSelectBox = createStringSelectBox("Tag history")
+discard tagSelectBox.addItem("java", cmdTagChoosed)
+discard tagSelectBox.addItem("izom", cmdTagChoosed)
+discard tagSelectBox.addItem("általános", cmdTagChoosed)
+
+questionEditorWindow.addView(tagInputField, 3, questionEditorWindow.h - 5)
+questionEditorWindow.addView(createLabel("(Press ctrl+h for tag history)"), tagInputField.x2 + 2, questionEditorWindow.h - 5)
+
 var okBtn = createButton("Ok", cmdEditQuestionOk)
 var explBtn = createButton("Magyarázat", cmdEditQuestionExpl)
 var cancelBtn = createButton("Mégse", cmdEditQuestionCancel)
 var historyBtn = createButton("Előzmények", cmdEditQuestionHistory)
 questionEditorWindow.addView(okBtn, 3, questionEditorWindow.h - 3)
-questionEditorWindow.addView(explBtn, okBtn.x + okBtn.w + 2, questionEditorWindow.h - 3)
-questionEditorWindow.addView(cancelBtn, explBtn.x + explBtn.w + 2, questionEditorWindow.h - 3)
-questionEditorWindow.addView(historyBtn, cancelBtn.x + cancelBtn.w + 2, questionEditorWindow.h - 3)
+questionEditorWindow.addView(explBtn, okBtn.x2 + 2, questionEditorWindow.h - 3)
+questionEditorWindow.addView(cancelBtn, explBtn.x2 + 2, questionEditorWindow.h - 3)
+questionEditorWindow.addView(historyBtn, cancelBtn.x2 + 2, questionEditorWindow.h - 3)
 
 
 
@@ -192,9 +203,16 @@ proc addQuestionPanel(self: ref TMindy) =
   questionPanel = createPanel(questionEditorWindow.w-2, questionEditorWindow.h - 3 - 5)
   self.currentQuestionUi.fillEditorPanel(questionPanel, self.question)
   questionEditorWindow.addView(questionPanel, 1, 3)
+  if self.question != nil:
+    tagInputField.text = $self.question.tag
 
 method handleEvent(self: ref TMindy, event: PEvent) = 
   case event.kind:
+  of TEventKind.eventKey:
+    if event.pressedCtrl('h'):
+      let tag = cast[string](deskt.executeViewAtCenter(tagSelectBox).data)
+      tagInputField.text = tag
+      event.setProcessed()
   of TEventKind.eventCommand:
     case event.cmd:
     of TCmd("switchUserButton"):
@@ -223,6 +241,7 @@ method handleEvent(self: ref TMindy, event: PEvent) =
       deskt.removeView(questionEditorWindow)
     of cmdEditQuestionOk:
       self.question = self.currentQuestionUi.createQuestionFromInput()
+      self.question.tag = tagInputField.utftext
       questionEditorWindow.removeView(questionPanel)
       deskt.removeView(questionEditorWindow)
   else:

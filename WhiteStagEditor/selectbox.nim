@@ -158,7 +158,7 @@ proc addItem*[T](self: PSelectBox, data: T, cmd: TCmd): PSelectItem =
   selectItem.rootBox = self
   self.items.add(selectItem)
 
-  var w = self.selectBoxItemWidthFunc(selectItem.data)
+  var w = self.selectBoxItemWidthFunc(selectItem.data) + 2
   if self.w > w:
     w = self.w
 
@@ -181,7 +181,7 @@ type
     text: string
 
 proc selectBoxStringItemWidth(data: pointer): int =
-  cast[string](data).len + 2
+  cast[string](data).len
 
 
 proc selectBoxStringItemDrawer(data: pointer, box: TOption[PSelectBox], index: int, buff: var TDrawBuffer) =

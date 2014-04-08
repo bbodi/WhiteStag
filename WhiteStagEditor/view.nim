@@ -140,6 +140,8 @@ proc x*(self: PView): int = self.rect.x
 proc y*(self: PView): int = self.rect.y
 proc w*(self: PView): int = self.rect.w
 proc h*(self: PView): int = self.rect.h
+proc x2*(self: PView): int = self.rect.x + self.w
+proc y2*(self: PView): int = self.rect.y + self.h
 
 
 method name*(self: PView): string = "View"

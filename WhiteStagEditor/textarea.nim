@@ -295,8 +295,13 @@ method handleEvent*(self: PTextArea, event: PEvent) =
     self.modified()
     event.setProcessed()
   of TEventKind.eventKey:
-    if self.isActive:
-      self.handleKey(event)
+    if not self.isActive:
+      return
+    if event.keyModifier.ctrl:
+      return
+    if event.keyModifier.alt:
+      return
+    self.handleKey(event)
   of TEventKind.eventTick:
     if not self.isActive:
       return
@@ -1285,6 +1290,13 @@ when isMainModule:
       textArea.handleEvent(PEvent(kind: TEventKind.eventKey, key: TKey.KeyArrowLeft))
       textArea.handleEvent(PEvent(kind: TEventKind.eventKey, key: TKey.KeyArrowLeft))
       check textArea.cursorPos == (2, 0)
+
+    test "ctrl and alt keys are ignored":
+      var event = PEvent(kind: TEventKind.eventKey, key: TKey.KeyArrowLeft, keyModifier: TKeyModifier(ctrl : true))
+      textArea.handleEvent(event)
+      check event.kind == TEventKind.eventKey
+      textArea.handleEvent(PEvent(kind: TEventKind.eventKey, key: TKey.KeyArrowLeft, keyModifier: TKeyModifier(alt : true)))
+      check event.kind == TEventKind.eventKey
 
     test "cursor up":
       discard
