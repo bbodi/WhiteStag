@@ -9,6 +9,7 @@ import option
 import sdlengine
 import rect
 import selectbox
+import utfstring
 
 
 type
@@ -16,7 +17,7 @@ type
   TComboBox* = object of TView
     selectbox*: PSelectBox
     frame: TWindowFrame
-    data*: pointer
+    data*: PUTFString
     defaultTitle*: string
 
 proc setSize*(self: PComboBox) =
@@ -40,7 +41,7 @@ proc drawSelectedItemToBuffer(self: PComboBox) =
 
 proc open(self: PComboBox) =
   let result = self.executeView(self.selectbox, 3, 1)
-  self.data = result.data
+  self.data = cast[PUTFString](result.data)
   self.drawSelectedItemToBuffer()
   if result.cmd != cmdOk:
     self.broadcastCommand(result.cmd, result.data)

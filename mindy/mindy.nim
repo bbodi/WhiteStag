@@ -1,45 +1,34 @@
-import WhiteStagEditor/window
-import WhiteStagEditor/sdlengine
-import WhiteStagEditor/view
-import WhiteStagEditor/pixel
-import WhiteStagEditor/option
-import WhiteStagEditor/desktop
-import WhiteStagEditor/selectbox
-import WhiteStagEditor/event
-import WhiteStagEditor/scrollableViewWrapper
-import WhiteStagEditor/scrollbar
-import WhiteStagEditor/progressbar
-import WhiteStagEditor/button
-import WhiteStagEditor/radiogroup
-import WhiteStagEditor/checkboxgroup
-import WhiteStagEditor/textfield
-import WhiteStagEditor/tree
-import WhiteStagEditor/stringtree
-import WhiteStagEditor/dialog
-import WhiteStagEditor/list
-import WhiteStagEditor/textarea
-import WhiteStagEditor/panel
-import WhiteStagEditor/combobox
-import WhiteStagEditor/utfstring
-import WhiteStagEditor/label
+import os
+
+import ../WhiteStagEditor/window
+import ../WhiteStagEditor/sdlengine
+import ../WhiteStagEditor/view
+import ../WhiteStagEditor/pixel
+import ../WhiteStagEditor/option
+import ../WhiteStagEditor/desktop
+import ../WhiteStagEditor/selectbox
+import ../WhiteStagEditor/event
+import ../WhiteStagEditor/scrollableViewWrapper
+import ../WhiteStagEditor/scrollbar
+import ../WhiteStagEditor/progressbar
+import ../WhiteStagEditor/button
+import ../WhiteStagEditor/radiogroup
+import ../WhiteStagEditor/checkboxgroup
+import ../WhiteStagEditor/textfield
+import ../WhiteStagEditor/tree
+import ../WhiteStagEditor/stringtree
+import ../WhiteStagEditor/dialog
+import ../WhiteStagEditor/list
+import ../WhiteStagEditor/textarea
+import ../WhiteStagEditor/panel
+import ../WhiteStagEditor/combobox
+import ../WhiteStagEditor/utfstring
+import ../WhiteStagEditor/label
+
+import types
+import db
 
 type
-  TQuestionKind = enum
-    qtypeAnd
-    qtypeOr
-    qtypeContains
-    qtypeControlledSkipping
-    qtypeRandomSkipping
-    qtypeTrueFalse
-    qtypeMirror
-  TQuestion = object
-    kind: TQuestionKind
-    problemStatement: PUTFString
-    answers: seq[PUTFString]
-    f: float
-    explanation: PUTFString
-    tag: PUTFString
-
   TQuestionUi = object of TObject
   TAndOrContainsQuestionUi = object of TQuestionUi
     problemStatementTextArea: PTextArea
@@ -180,10 +169,11 @@ var deskt = createDesktop(application, 80, 40, 14)
 deskt.addViewAtCenter(menuWindow)
 
 var usersMenu = createStringSelectBox("Balázs", false)
-discard usersMenu.addItem("Bettina", TCmd("switchUserButton"))
-discard usersMenu.addItem("Béla", TCmd("switchUserButton"))
-discard usersMenu.addItem("Károly", TCmd("switchUserButton"))
-discard usersMenu.addItem("Józsi", TCmd("switchUserButton"))
+discard usersMenu.addItem("Új felhasználó...", TCmd("createUserButton"))
+for fileName in walkFiles("*.db"):
+  let dbName = fileName[0..fileName.len-4]
+  discard usersMenu.addItem(dbName, TCmd("switchUserButton"))
+
 
 var switchUserComboBox = createComboBox("Felhasználó váltása", usersMenu)
 var startButton = createButton("Kezdés", TCmd("Start"))
@@ -196,7 +186,6 @@ menuWindow.addViewAtCenter(newButton, 0)
 menuWindow.addViewAtCenter(editButton, 1)
 menuWindow.addViewAtCenter(exitButton, 2)
 
-
 discard deskt.execute()
 
 proc addQuestionPanel(self: ref TMindy) = 
@@ -206,20 +195,30 @@ proc addQuestionPanel(self: ref TMindy) =
   if self.question != nil:
     tagInputField.text = $self.question.tag
 
+proc selectUser(self: ref TMindy, username: string) =
+  var dao = createDao(username)
+      
+  menuWindow.title = username
+  menuWindow.modified()
+
 method handleEvent(self: ref TMindy, event: PEvent) = 
   case event.kind:
   of TEventKind.eventKey:
     if event.pressedCtrl('h'):
-      let tag = cast[string](deskt.executeViewAtCenter(tagSelectBox).data)
-      tagInputField.text = tag
+      let tag = cast[PUTFString](deskt.executeViewAtCenter(tagSelectBox).data)
+      tagInputField.text = $tag
       event.setProcessed()
   of TEventKind.eventCommand:
     case event.cmd:
+    of TCmd("createUserButton"):
+      event.setProcessed()
+      let username = deskt.showStringDialog("Név")
+      discard usersMenu.addItem(username, TCmd("switchUserButton"))
+      self.selectUser(username)
     of TCmd("switchUserButton"):
       event.setProcessed()
-      let resultNameString = cast[string](switchUserComboBox.data)
-      menuWindow.title = resultNameString
-      menuWindow.modified()
+      let username = cast[PUTFString](switchUserComboBox.data)
+      self.selectUser($username)
     of TCmd("addNewQuestion"):
       deskt.addViewAtCenter(questionEditorWindow)
       if self.question != nil:
@@ -230,8 +229,8 @@ method handleEvent(self: ref TMindy, event: PEvent) =
         else:
           discard
     of cmdChangeQuestionType:
-      let questionType = cast[string](questionTypeComboBox.data)
-      case questionType:
+      let questionType = cast[PUTFString](questionTypeComboBox.data)
+      case $questionType:
       of "And, Or, Contains":
         self.currentQuestionUi = new TAndOrContainsQuestionUi
 

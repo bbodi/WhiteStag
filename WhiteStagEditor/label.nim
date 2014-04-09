@@ -40,6 +40,6 @@ when isMainModule:
   import unittest
 
   test "inheritance":
-    let view: PView = createLabel(nil, 0, 0, 0)
+    let view: PView = createLabel("label text")
     discard view.draw()
     check "Label" == view.name

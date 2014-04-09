@@ -27,6 +27,9 @@ proc newString*(str: string): PUTFString =
   result = new(UTFString)
   result.initFromString(str)
 
+proc utf*(str: string): PUTFString =
+  result = newString(str)
+
 proc newString*(str: PUTFString): PUTFString =
   result = new(UTFString)
   result.chars = str.chars
@@ -60,7 +63,9 @@ proc set*(self: ref UTFString, str: string) =
   self.initFromString(str)
 
 proc `==`*(self: ref UTFString, str: string): bool = 
-  self.strFromRunes() == str
+  if str == nil and cast[pointer](self) == nil:
+    return true
+  return self.strFromRunes() == str
 
 proc `&`*(str: string, utfstr: ref UTFString): string =
   return str & utfstr.strFromRunes()
@@ -114,6 +119,8 @@ when isMainModule:
       check newString("test") == "test"
       check newString("éáőúűóü") == "éáőúűóü"
       check newString("é á\nő\tú") == "é á\nő\tú"
+      var n: PUTFString
+      check n == nil
 
     test "spaces":
       var str = newString("é á ő")
