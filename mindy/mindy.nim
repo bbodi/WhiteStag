@@ -37,7 +37,7 @@ type
 
   TMindy* = object of TApplication
     currentQuestionUi: ref TQuestionUi
-    question: ref TQuestion
+    questions: seq[ref TQuestion]
 
 
 const
@@ -128,6 +128,9 @@ questionEditorWindow.closeable = false
 questionEditorWindow.resizable = true
 questionEditorWindow.growMode = {}
 
+var elozmenyekSelectBox = createStringSelectBox("Előzmények")
+var elozmenyekComboBox = createComboBox("Előzmények", elozmenyekSelectBox)
+
 var questionTypeSelectBox = createStringSelectBox("Type")
 discard questionTypeSelectBox.addItem("And, Or, Contains", cmdChangeQuestionType)
 discard questionTypeSelectBox.addItem("Controlled skipping", cmdChangeQuestionType)
@@ -150,11 +153,11 @@ questionEditorWindow.addView(createLabel("(Press ctrl+h for tag history)"), tagI
 var okBtn = createButton("Ok", cmdEditQuestionOk)
 var explBtn = createButton("Magyarázat", cmdEditQuestionExpl)
 var cancelBtn = createButton("Mégse", cmdEditQuestionCancel)
-var historyBtn = createButton("Előzmények", cmdEditQuestionHistory)
+
 questionEditorWindow.addView(okBtn, 3, questionEditorWindow.h - 3)
 questionEditorWindow.addView(explBtn, okBtn.x2 + 2, questionEditorWindow.h - 3)
 questionEditorWindow.addView(cancelBtn, explBtn.x2 + 2, questionEditorWindow.h - 3)
-questionEditorWindow.addView(historyBtn, cancelBtn.x2 + 2, questionEditorWindow.h - 3)
+questionEditorWindow.addView(elozmenyekComboBox, cancelBtn.x2 + 2, questionEditorWindow.h - 3)
 
 
 
@@ -164,6 +167,7 @@ menuWindow.resizable = false
 menuWindow.growMode = {}
 
 var application = new(TMindy)
+application.questions = @[]
 
 var deskt = createDesktop(application, 80, 40, 14)
 deskt.addViewAtCenter(menuWindow)
@@ -177,7 +181,7 @@ for fileName in walkFiles("*.db"):
 
 var switchUserComboBox = createComboBox("Felhasználó váltása", usersMenu)
 var startButton = createButton("Kezdés", TCmd("Start"))
-var newButton = createButton("Új hozzáadása", TCmd("addNewQuestion"))
+var newButton = createButton("Új hozzáadása", TCmd("addNewQuestionClicked"))
 var editButton = createButton("Szerkesztés", TCmd("Start"))
 var exitButton = createButton("Kilépés", cmdQuit)
 menuWindow.addViewAtCenter(switchUserComboBox, -3)
@@ -188,12 +192,12 @@ menuWindow.addViewAtCenter(exitButton, 2)
 
 discard deskt.execute()
 
-proc addQuestionPanel(self: ref TMindy) = 
+proc addQuestionPanel(self: ref TMindy, question: ref TQuestion) = 
   questionPanel = createPanel(questionEditorWindow.w-2, questionEditorWindow.h - 3 - 5)
-  self.currentQuestionUi.fillEditorPanel(questionPanel, self.question)
+  self.currentQuestionUi.fillEditorPanel(questionPanel, question)
   questionEditorWindow.addView(questionPanel, 1, 3)
-  if self.question != nil:
-    tagInputField.text = $self.question.tag
+  if question != nil:
+    tagInputField.text = $question.tag
 
 proc selectUser(self: ref TMindy, username: string) =
   var dao = createDao(username)
@@ -222,30 +226,27 @@ method handleEvent(self: ref TMindy, event: PEvent) =
       event.setProcessed()
       let username = cast[PUTFString](switchUserComboBox.data)
       self.selectUser($username)
-    of TCmd("addNewQuestion"):
+    of TCmd("addNewQuestionClicked"):
       deskt.addViewAtCenter(questionEditorWindow)
-      if self.question != nil:
-        case self.question.kind:
-        of qtypeAnd, qtypeOr, qtypeContains:
-          self.currentQuestionUi = new TAndOrContainsQuestionUi 
-          self.addQuestionPanel() 
-        else:
-          discard
     of cmdChangeQuestionType:
       let questionType = cast[PUTFString](questionTypeComboBox.data)
       case $questionType:
       of "And, Or, Contains":
         self.currentQuestionUi = new TAndOrContainsQuestionUi
 
-      self.addQuestionPanel() 
+      self.addQuestionPanel(nil)
     of cmdEditQuestionCancel:
       if not questionPanel.isNil and questionPanel.hasOwner:
         questionEditorWindow.removeView(questionPanel)
       deskt.removeView(questionEditorWindow)
     of cmdEditQuestionOk:
-      self.question = self.currentQuestionUi.createQuestionFromInput()
-      self.question.tag = tagInputField.utftext
+      let question = self.currentQuestionUi.createQuestionFromInput()
+      question.tag = tagInputField.utftext
+      let elozmenyText = question.problemStatement.substring(0, 30) & "..."
+      discard elozmenyekSelectBox.addItem(elozmenyText, TCmd("cmdElozmenyClicked"))
+      self.questions.add(question)
       questionEditorWindow.removeView(questionPanel)
-      deskt.removeView(questionEditorWindow)
+      self.addQuestionPanel(nil)
+      #deskt.removeView(questionEditorWindow)
   else:
     discard

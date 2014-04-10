@@ -40,7 +40,11 @@ proc drawSelectedItemToBuffer(self: PComboBox) =
 
 
 proc open(self: PComboBox) =
-  let result = self.executeView(self.selectbox, 3, 1)
+  let parentY2 = self.owner.expect("combobox must have a parent when it is drawn").realY2
+  var y = 1
+  if parentY2 < self.realY + self.selectbox.h:
+    y = -self.selectbox.h
+  let result = self.executeView(self.selectbox, 3, y)
   self.data = cast[PUTFString](result.data)
   self.drawSelectedItemToBuffer()
   if result.cmd != cmdOk:

@@ -26,10 +26,10 @@ type
   PView* = ref TView
   TView* = object of TObject
     nextViewOpt, prevViewOpt: TOption[PView]
-    rect: TRegion
+    rect*: TRegion
     buff*: TDrawBuffer
     growMode*: set[TGrowMode]
-    owner: TOption[PView]
+    owner*: TOption[PView] # TODO: readonly
     pDirty: bool
     pExecuting: bool
     hasDirtyChild: bool
@@ -144,6 +144,16 @@ proc w*(self: PView): int = self.rect.w
 proc h*(self: PView): int = self.rect.h
 proc x2*(self: PView): int = self.rect.x + self.w
 proc y2*(self: PView): int = self.rect.y + self.h
+
+proc realY*(self: PView): int = 
+  result = self.rect.y
+  if self.owner.isSome:
+    result += self.owner.data.realY
+
+proc realY2*(self: PView): int = 
+  result = self.rect.y + self.h
+  if self.owner.isSome:
+    result += self.owner.data.realY
 
 
 method name*(self: PView): string = "View"

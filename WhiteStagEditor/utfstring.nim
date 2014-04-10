@@ -71,8 +71,25 @@ proc `==`*(self: ref UTFString, other: ref UTFString): bool =
     return true
   return self.chars == other.chars
 
+
+proc append*(self: ref UTFString, other: ref UTFString) =
+  self.chars.add(other.chars)
+    
+proc substring*(self: ref UTFString, fromIndex: int, toIndex : int = -1): ref UTFString =
+  var toIndexMod = toIndex
+  if toIndex == -1 or toIndex > self.len:
+    toIndexMod = self.len
+  if toIndexMod <= fromIndex:
+    return utf""
+  result = new UTFString
+  result.chars = self.chars[fromIndex .. <toIndexMod]
+
 proc `&`*(str: string, utfstr: ref UTFString): string =
   return str & utfstr.strFromRunes()
+
+proc `&`*(lhs: ref UTFString, str: string):ref UTFString =
+  lhs.append(newString(str))
+  return lhs
 
 proc `&=`*(self: var string, utfstr: ref UTFString) =
   self &= utfstr.strFromRunes()
@@ -97,18 +114,6 @@ proc remove*(self: ref UTFString, fromIndex: int, toIndex : int = -1) =
 
 proc `$`*(self: ref UTFString): string =
   self.strFromRunes()
-
-proc append*(self: ref UTFString, other: ref UTFString) =
-  self.chars.add(other.chars)
-    
-proc substring*(self: ref UTFString, fromIndex: int, toIndex : int = -1): ref UTFString =
-  var toIndexMod = toIndex
-  if toIndex == -1:
-    toIndexMod = self.len
-  if toIndexMod <= fromIndex:
-    return utf""
-  result = new UTFString
-  result.chars = self.chars[fromIndex .. toIndex]
 
 when isMainModule:
   import unittest
@@ -210,3 +215,5 @@ when isMainModule:
       check str.substring(0) == str
       check str.substring(4) == "abcd def"
       check str.substring(12) == ""
+      check str.substring(0, 100) == "éáő abcd def"
+      check newString("1").substring(0, 30) == "1"

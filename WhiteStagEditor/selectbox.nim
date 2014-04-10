@@ -153,9 +153,9 @@ proc calcViewSizeForItemList*(title: string, items: openarray[string]): tuple[x,
   return (maxWidth+2, items.len+2)
 
 
-proc addItem*(self: PSelectBox, data: string, cmd: TCmd): PSelectItem = 
+proc addItem*(self: PSelectBox, data: ref UTFString, cmd: TCmd): PSelectItem = 
   let selectItem = new(TSelectItem)
-  selectItem.data = newString(data)
+  selectItem.data = data
   selectItem.cmd = cmd
   selectItem.rootBox = self
   self.items.add(selectItem)
@@ -167,6 +167,9 @@ proc addItem*(self: PSelectBox, data: string, cmd: TCmd): PSelectItem =
   self.setWidthHeight(w, self.h + 1)
   self.modified()
   return selectItem
+
+proc addItem*(self: PSelectBox, data: string, cmd: TCmd): PSelectItem = 
+  self.addItem(newString(data), cmd)
 
 proc addItem*(self: PSelectItem, data: string, cmd: TCmd): PSelectItem = 
   if self.childBox == nil:
@@ -194,7 +197,7 @@ proc selectBoxStringItemDrawer(text: PUTFString, box: TOption[PSelectBox], index
       FrameColor.color(box.data.isFocused)
     else:
       FrameColor.color(false)
-  let y = if box.isSome and box.data.frame.hasBorder: index+1 else: index
+  var y = if box.isSome and box.data.frame.hasBorder: index+1 else: index
   buff.writeText(1, y, $text, bg = bg)
 
 proc createStringSelectBox*(title: string, hasBorder: bool = true): PSelectBox = createSelectBox(title, selectBoxStringItemWidth, selectBoxStringItemDrawer, hasBorder)
