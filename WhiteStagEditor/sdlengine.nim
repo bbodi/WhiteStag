@@ -1,5 +1,8 @@
 import unicode
-
+when defined(windows):
+  import windows
+when defined(Posix):
+  import posix
 import sdl_ttf
 import sdl
 
@@ -9,6 +12,7 @@ import rect
 import color
 import font
 import event
+import utfstring
 
 var inited: bool
 
@@ -436,6 +440,19 @@ proc pollEvent*(self: PSdlEngine): event.PEvent =
     let event = self.processSdlEvent(sdlEvent)
     if event != nil:
       return event
+
+proc readClipBoard*(self: PSdlEngine): PUTFString = 
+  result = utf""
+  if OpenClipboard(0) != 0:
+    let clip = GetClipboardData(CF_UNICODETEXT)
+    var clipPtr = cast[TAddress](clip)
+    while true:
+      let rune = TRune(cast[PWideChar](clipPtr)[])
+      if rune == TRune(0):
+        break
+      result.append(rune)
+      clipPtr = clipPtr + sizeof(int16)
+  discard CloseClipboard()
 
 when isMainModule:
   import unittest

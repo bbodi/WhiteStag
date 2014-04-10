@@ -22,7 +22,7 @@ type
 
 proc setSize*(self: PComboBox) =
   let w = 
-    if self.data != nil:
+    if not self.data.isNil:
       self.selectbox.getItemWidth(self.data) + 2
     else:
       self.defaultTitle.len + 2
@@ -32,7 +32,7 @@ proc drawSelectedItemToBuffer(self: PComboBox) =
   self.setSize()
   self.buff.clear()
   self.frame.draw(self, self.buff)
-  if self.data == nil:
+  if self.data.isNil:
     self.buff.writeText(1, 0, self.defaultTitle & "↓")
   else:
     self.selectbox.drawItemTo(self.data, self.buff)

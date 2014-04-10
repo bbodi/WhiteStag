@@ -68,7 +68,7 @@ method fillEditorPanel(self: ref TAndOrContainsQuestionUi, panel: PPanel, questi
   self.qtypeRadioGrp.addItem("Contains")
   panel.addView(self.qtypeRadioGrp, panel.w - 2 - self.qtypeRadioGrp.w, 0)
 
-  self.problemStatementTextArea = createTextArea(panel.w - 2 - self.qtypeRadioGrp.w - 2, 10)
+  self.problemStatementTextArea = createTextArea(panel.w - 2 - self.qtypeRadioGrp.w - 2, 13)
   panel.addView(self.problemStatementTextArea, 0, 0)
   
   var inputFieldsPanel = createPanel(30, 5)
@@ -205,9 +205,12 @@ method handleEvent(self: ref TMindy, event: PEvent) =
   case event.kind:
   of TEventKind.eventKey:
     if event.pressedCtrl('h'):
-      let tag = cast[PUTFString](deskt.executeViewAtCenter(tagSelectBox).data)
-      tagInputField.text = $tag
       event.setProcessed()
+      let result = deskt.executeViewAtCenter(tagSelectBox)
+      if result.cmd == cmdCancel:
+        return
+      let tag = cast[PUTFString](result.data)
+      tagInputField.text = $tag
   of TEventKind.eventCommand:
     case event.cmd:
     of TCmd("createUserButton"):
@@ -236,7 +239,8 @@ method handleEvent(self: ref TMindy, event: PEvent) =
 
       self.addQuestionPanel() 
     of cmdEditQuestionCancel:
-      questionEditorWindow.removeView(questionPanel)
+      if not questionPanel.isNil and questionPanel.hasOwner:
+        questionEditorWindow.removeView(questionPanel)
       deskt.removeView(questionEditorWindow)
     of cmdEditQuestionOk:
       self.question = self.currentQuestionUi.createQuestionFromInput()

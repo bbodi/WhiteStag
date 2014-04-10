@@ -2,11 +2,11 @@ import unicode
 
 type
   PUTFString* = ref UTFString
-  UTFString = object
+  UTFString* = object
     chars: seq[TRune]
 
 const
-  NewLineRune = TRune(0x0A)
+  NewLineRune* = TRune(0x0A)
   TabRune* = TRune(0x0009)
 
 proc initFromString(self: PUTFString, str: string) =
@@ -33,7 +33,6 @@ proc utf*(str: string): PUTFString =
 proc newString*(str: PUTFString): PUTFString =
   result = new(UTFString)
   result.chars = str.chars
-
 
 proc charFromRune(rune: TRune): string =
   if rune == NewLineRune:
@@ -67,6 +66,11 @@ proc `==`*(self: ref UTFString, str: string): bool =
     return true
   return self.strFromRunes() == str
 
+proc `==`*(self: ref UTFString, other: ref UTFString): bool = 
+  if cast[pointer](other) == nil and cast[pointer](self) == nil:
+    return true
+  return self.chars == other.chars
+
 proc `&`*(str: string, utfstr: ref UTFString): string =
   return str & utfstr.strFromRunes()
 
@@ -97,6 +101,14 @@ proc `$`*(self: ref UTFString): string =
 proc append*(self: ref UTFString, other: ref UTFString) =
   self.chars.add(other.chars)
     
+proc substring*(self: ref UTFString, fromIndex: int, toIndex : int = -1): ref UTFString =
+  var toIndexMod = toIndex
+  if toIndex == -1:
+    toIndexMod = self.len
+  if toIndexMod <= fromIndex:
+    return utf""
+  result = new UTFString
+  result.chars = self.chars[fromIndex .. toIndex]
 
 when isMainModule:
   import unittest
@@ -120,7 +132,7 @@ when isMainModule:
       check newString("éáőúűóü") == "éáőúűóü"
       check newString("é á\nő\tú") == "é á\nő\tú"
       var n: PUTFString
-      check n == nil
+      check n.isNil
 
     test "spaces":
       var str = newString("é á ő")
@@ -192,3 +204,9 @@ when isMainModule:
       check createThenRemove("éáőúűóü", 3, 7) == "éáő" 
       check createThenRemove("éáőúűóü", 7, 3) == "éáőúűóü"
       check createThenRemove("0123456789", 2, 6) == "016789"
+
+    test "substring":
+      var str = newString("éáő abcd def")
+      check str.substring(0) == str
+      check str.substring(4) == "abcd def"
+      check str.substring(12) == ""

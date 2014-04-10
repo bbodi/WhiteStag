@@ -122,6 +122,8 @@ method writeData*(self: PView, stream: PStream) = discard
 
 method readData*(self: PView, stream: PStream) = discard
 
+proc hasOwner*(self: PView): bool = self.owner.isSome
+
 proc groupWriteDataTo*[T](self: PView, data: var T) = 
   let stream: PStream = newByteStream(data)
   if self.views != nil:

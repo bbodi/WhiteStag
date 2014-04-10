@@ -78,6 +78,27 @@ proc updateText(self: PTextArea, cstr: string) =
     inc i
   self.lines.add(newString(currentLineText))
 
+proc appendCharAtCursor(self: PTextArea, ch: TRune) =
+  self.lines[self.cursorPos.y].insert(ch, self.cursorPos.x)
+  inc self.cursorPos.x
+
+proc append*(self: PTextArea, str: ref UTFString) =  
+  var i = 0
+  while i < str.len:
+    let rune = str.runeAt(i)
+    if rune == NewLineRune:
+      let tail = self.lines[self.cursorPos.y].substring(self.cursorPos.x)
+      self.lines[self.cursorPos.y].remove(self.cursorPos.x)
+      self.lines.insert(tail, self.cursorPos.y+1)
+      self.cursorPos.x = 0
+      inc self.cursorPos.y
+    else:
+      self.appendCharAtCursor(rune)
+    inc i
+
+proc append*(self: PTextArea, cstr: string) =  
+  self.append(newString(cstr))
+
 proc `text=`*(self: PTextArea, txt: string) =
   self.updateText(txt)
 
@@ -104,10 +125,6 @@ proc clearSelection(self: PTextArea) =
 
 proc handleMouse(self: PTextArea, event: PEvent) =
   discard
-
-proc appendCharAtCursor(self: PTextArea, ch: TRune) =
-  self.lines[self.cursorPos.y].insert(ch, self.cursorPos.x)
-  inc self.cursorPos.x
 
 proc handleCursorMoving*(self:PTextArea, event: PEvent) =
   let currentLineText = self.lines[self.cursorPos.y]
@@ -298,6 +315,10 @@ method handleEvent*(self: PTextArea, event: PEvent) =
     if not self.isActive:
       return
     if event.keyModifier.ctrl:
+      if event.pressedCtrl('v'):
+        event.setProcessed()
+        let text = engine.readClipBoard()
+        self.append($text)
       return
     if event.keyModifier.alt:
       return
@@ -395,6 +416,28 @@ when isMainModule:
       check textArea.lines[0] == "a"
       check textArea.lines[1] == "b"
       check textArea.lines[2] == "c"
+
+    test "appending text at the end of a line":
+      textArea.text = "a\nb\nc"
+      textArea.cursorPos = (1, 2)
+      textArea.append("x\ny\nz")
+      check textArea.lines.len == 5
+      check textArea.lines[0] == "a"
+      check textArea.lines[1] == "b"
+      check textArea.lines[2] == "cx"
+      check textArea.lines[3] == "y"
+      check textArea.lines[4] == "z"
+
+    test "appending text in the middle of a row":
+      textArea.text = "a\nbcd\ne"
+      textArea.cursorPos = (2, 1)
+      textArea.append("x\ny\nz")
+      check textArea.lines.len == 5
+      check textArea.lines[0] == "a"
+      check textArea.lines[1] == "bcx"
+      check textArea.lines[2] == "y"
+      check textArea.lines[3] == "zd"
+      check textArea.lines[4] == "e"
 
     test "setting long text: line wrapping occurs at drawing, long lines are stored in one line!":
       textArea.text = "012340123401234"
