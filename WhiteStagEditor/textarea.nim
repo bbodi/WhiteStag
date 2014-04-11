@@ -17,6 +17,7 @@ type
     lines: seq[PUTFString]
     cursorPos: TPoint
     showCursor: bool
+    dontHandleControlKeys*: bool
     selectRegionStart: TPoint
 
   TSelectionCoord* = tuple[startPos: TPoint, endPos: TPoint]
@@ -248,6 +249,8 @@ proc handleKey*(self: PTextArea, event: PEvent) =
         if currentLineText.len > 0:
           self.cursorPos.x = currentLineText.len-1
   of TKey.KeyEnter:
+    if self.dontHandleControlKeys:
+      return
     if self.selectRegionStart != (-1, -1):
       self.deleteSelectedText()
     let cursorX = self.cursorPos.x
@@ -268,6 +271,8 @@ proc handleKey*(self: PTextArea, event: PEvent) =
     inc self.cursorPos.y
     self.cursorPos.x = 0
   of TKey.KeyTab:
+    if self.dontHandleControlKeys:
+      return
     self.appendCharAtCursor(TRune(0x0009))
   else:
     return
@@ -320,6 +325,7 @@ method handleEvent*(self: PTextArea, event: PEvent) =
         let text = engine.readClipBoard()
         self.append($text)
       return
+    # TODO: characters that needs alt needs to be handled
     if event.keyModifier.alt:
       return
     self.handleKey(event)
@@ -393,6 +399,7 @@ proc createTextArea*(w, h: int): PTextArea =
   result.selectRegionStart = (-1, -1)
   result.setWidthHeight(w, h)
   result.text = ""
+  result.dontChangePositionWhenReceiveFocus = true
 
 
 when isMainModule:
@@ -583,12 +590,31 @@ when isMainModule:
       check textArea.lines[0] == "á"
       check textArea.lines[1] == "á"
 
+    test "insert newline but dont handle it":
+      textArea.dontHandleControlKeys = true
+      textArea.text = "áá"
+      textArea.cursorPos.x = 1
+      check textArea.cursorPos.y == 0
+      textArea.handleEvent(PEvent(kind: TEventKind.eventKey, key: TKey.KeyEnter))
+      check textArea.text == "áá"
+      check textArea.cursorPos == (1, 0)
+      check textArea.lines.len == 1
+      check textArea.lines[0] == "áá"
+
     test "insert tab":
       textArea.text = "áá"
       textArea.cursorPos.x = 1
       textArea.handleEvent(PEvent(kind: TEventKind.eventKey, key: TKey.KeyTab))
       check textArea.text == "á\tá"
       check textArea.cursorPos.x == 2
+
+    test "insert tab but dont handle it":
+      textArea.dontHandleControlKeys = true
+      textArea.text = "áá"
+      textArea.cursorPos.x = 1
+      textArea.handleEvent(PEvent(kind: TEventKind.eventKey, key: TKey.KeyTab))
+      check textArea.text == "áá"
+      check textArea.cursorPos == (1, 0)
 
     test "drawing chars in the first row":
       textArea.text = "áá"

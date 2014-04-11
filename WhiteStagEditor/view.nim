@@ -39,7 +39,8 @@ type
     executingResult: TExecutingResult
     useClipping*: bool
     minWidth*, minHeight*: int
-    pBottomViewOpt, pTopViewOpt: TOption[PView]
+    pFocusedViewOpt, pBottomViewOpt, pTopViewOpt: TOption[PView]
+    dontChangePositionWhenReceiveFocus*: bool
     
     selectable: bool
 
@@ -271,7 +272,7 @@ proc `topView`*(self: PView): TOption[PView] = self.pTopViewOpt
 proc `bottomView`*(self: PView): TOption[PView] = self.pBottomViewOpt
 
 proc isFocused*(self: PView): bool =
-  self.owner.isSome and self.owner.data.pTopViewOpt.equals(self)
+  self.owner.isSome and self.owner.data.pFocusedViewOpt.equals(self)
 
 proc isActive*(self: PView): bool =
   self.owner.isNone or (self.isFocused and self.owner.data.isActive)
@@ -416,41 +417,36 @@ proc sendLostFocusEvent*(self: PView) =
 
 proc setMyParentsFocused(self: PView) =
   self.owner.ifSome do (parent: PView):
-    parent.makeMeLast()
+    if not parent.dontChangePositionWhenReceiveFocus:
+      parent.makeMeLast()
+    if parent.owner.isSome:
+      parent.owner.data.pFocusedViewOpt = some(parent)
     parent.setMyParentsFocused()
   
 proc setFocused*(self: PView) =
-  self.makeMeLast()
+  self.pFocusedViewOpt.ifSome do (focusedView: PView):
+    focusedView.broadcast(PEvent(kind: TEventKind.eventLostFocus, view: cast[pointer](focusedView)))
+  if not self.dontChangePositionWhenReceiveFocus:
+    self.makeMeLast()
+  if self.owner.isSome:
+    self.owner.data.pFocusedViewOpt = some(self)
   self.setMyParentsFocused()
   self.broadcast(PEvent(kind: TEventKind.eventGetFocus, view: cast[pointer](self)))
-  
-
-proc changeSwapFocusedViewTo(self: PView, child: PView) =
-  self.pTopViewOpt.ifSome do (focusedView: PView):
-    focusedView.broadcast(PEvent(kind: TEventKind.eventLostFocus, view: cast[pointer](focusedView)))
-  self.broadcast(PEvent(kind: TEventKind.eventGetFocus, view: cast[pointer](child)))
-  self.makeLast(child)
 
 proc selectNext*(self: PView, backward: bool = false) =
   if self.pTopViewOpt.isNone:
-    if self.views.len == 0:
-      return
-    if not backward:
-      self.pTopViewOpt.expect("views.len > 0").setFocused()
-    else:
-      self.pBottomViewOpt.expect("views.len > 0").setFocused()
     return
-  let focusedView = self.pTopViewOpt.data
+  let focusedView = self.pFocusedViewOpt.expect("if there is a TopView, then there must be a focused view too!")
   if not backward:
     if focusedView.nextViewOpt.isNone:
-      self.changeSwapFocusedViewTo(self.pBottomViewOpt.data)
-      return
-    self.changeSwapFocusedViewTo(focusedView.nextViewOpt.data)
+      self.pBottomViewOpt.data.setFocused()
+    else:
+      focusedView.nextViewOpt.data.setFocused()
   else:
     if focusedView.prevViewOpt.isNone:
-      self.changeSwapFocusedViewTo(self.pTopViewOpt.data)
-      return
-    self.changeSwapFocusedViewTo(focusedView.prevViewOpt.data)
+      self.pTopViewOpt.data.setFocused()
+    else:
+      focusedView.prevViewOpt.data.setFocused()
 
 proc addView*(self: PView, child: PView, x, y: int) = 
   if self.views == nil:
@@ -458,6 +454,7 @@ proc addView*(self: PView, child: PView, x, y: int) =
   child.moveTo(x, y)
   self.views.add(child)
   self.insertLast(child)
+  self.pFocusedViewOpt = some(child)
   child.owner = some(self)
   child.modified()
 
@@ -549,6 +546,7 @@ proc clearViews*(self: PView) =
   self.views = @[]
   self.pTopViewOpt = none[PView]()
   self.pBottomViewOpt = none[PView]()
+  self.pFocusedViewOpt = none[PView]()
 
 proc executeView*(self, view: PView, x, y: int): TExecutingResult =
   doAssert(self != view, "self.xecuteView(self)")
@@ -1234,6 +1232,45 @@ when isMainModule:
       check v1.isFocused
       check v2.isFocused == false
       checkViewOrder(win, v0, v2, v1)
+
+    test "selectNext 2":
+      testv0.dontChangePositionWhenReceiveFocus = true
+      testv1.dontChangePositionWhenReceiveFocus = true
+      testv2.dontChangePositionWhenReceiveFocus = true
+      let win = PTestView(name: "win")
+      win.addView(testv0, 0, 0)
+      win.addView(testv1, 0, 0)
+      win.addView(testv2, 0, 0)
+
+      check v0.isFocused == false
+      check v1.isFocused == false
+      check v2.isFocused
+      checkViewOrder(win, v0, v1, v2)
+
+      win.selectNext()
+      check testv0.isFocused
+      check v0.isFocused
+      check v1.isFocused == false
+      check v2.isFocused == false
+      checkViewOrder(win, v0, v1, v2)
+
+      win.selectNext()
+      check v0.isFocused == false
+      check v1.isFocused
+      check v2.isFocused == false
+      checkViewOrder(win, v0, v1, v2)
+
+      win.selectNext()
+      check v0.isFocused == false
+      check v1.isFocused == false
+      check v2.isFocused
+      checkViewOrder(win, v0, v1, v2)
+
+      win.selectNext(backward = true)
+      check v0.isFocused == false
+      check v1.isFocused
+      check v2.isFocused == false
+      checkViewOrder(win, v0, v1, v2)
 
     test "drawing order":
       v0.addView(v1, 0, 0)

@@ -9,6 +9,7 @@ import sdlengine
 import selectbox
 import rect
 import pixel
+import window
 
 type
   PPanel* = ref TPanel
@@ -21,6 +22,7 @@ method name*(self: PPanel): string =
 
 
 method handleEvent*(self: PPanel, event: PEvent) = 
+  self.handleFocusChangeEvents(event)
   discard
 
 method draw*(self: PPanel): TDrawBuffer = 

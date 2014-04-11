@@ -8,30 +8,30 @@ import event
 import option
 import sdlengine
 import rect
+import utfstring
 
 type
-  PRadioGroup* = ref TRadioButton
-  TRadioButton* = object of TView
+  PCheckBoxGroup* = ref TCheckBoxGroup
+  TCheckBoxGroup* = object of TView
     frame: TWindowFrame
     currentRow: int
-    items: seq[pointer]
+    items: seq[PUTFString]
     selectedIndices: seq[bool]
-    itemDrawer*: PItemDrawer
 
-proc drawItem*(self: PRadioGroup, item: pointer, index: int, buff: var TDrawBuffer) = 
+proc drawItem*(self: PCheckBoxGroup, item: PUTFString, index: int, buff: var TDrawBuffer) = 
   let selected = self.selectedIndices[index]
-  var text = (if selected: "[X] " else: "[ ] ") & self.itemDrawer.itemToString(item)
+  var text = (if selected: "[X] " else: "[ ] ") & item
   let yOffset = if self.frame.hasBorder: 1 else: 0
   buff.writeText(1, yOffset+index, text, fg = PanelTextColor.color(selected))
 
-proc getClickedItemIndex(self: PRadioGroup, mouseY: int): int = 
+proc getClickedItemIndex(self: PCheckBoxGroup, mouseY: int): int = 
   let firstItemIndex = if self.frame.hasBorder: 1 else: 0
   return mouseY - firstItemIndex
 
-proc handleMouse(self: PRadioGroup, event: PEvent) =
+proc handleMouse(self: PCheckBoxGroup, event: PEvent) =
   discard
 
-proc handleKey*(self: PRadioGroup, event: PEvent) =
+proc handleKey*(self: PCheckBoxGroup, event: PEvent) =
   case event.key:  
   of TKey.KeyArrowDown:
     self.currentRow += 1
@@ -50,11 +50,11 @@ proc handleKey*(self: PRadioGroup, event: PEvent) =
   else:
     discard
 
-proc isChecked(self: PRadioGroup, index: int): bool = self.selectedIndices[index]
+proc isChecked(self: PCheckBoxGroup, index: int): bool = self.selectedIndices[index]
     
-method name*(self: PRadioGroup): string = "CheckboxGroup"
+method name*(self: PCheckBoxGroup): string = "CheckboxGroup"
 
-method handleEvent*(self: PRadioGroup, event: PEvent) = 
+method handleEvent*(self: PCheckBoxGroup, event: PEvent) = 
   case event.kind:
   of TEventKind.eventMouseButtonDown:
     let clickedOnItem1 = (self.frame.hasBorder == false or event.localMouseY > 0)
@@ -70,49 +70,41 @@ method handleEvent*(self: PRadioGroup, event: PEvent) =
   else:
     discard
 
-method draw*(self: PRadioGroup): TDrawBuffer = 
+method draw*(self: PCheckBoxGroup): TDrawBuffer = 
   self.frame.draw(self, self.buff)
   self.buff.setCells(0, 0, self.w, self.h, bg = PanelColor.color(self.isFocused))
   for i, item in self.items:
     self.drawItem(item, i, self.buff)
   return self.buff
 
-proc createRadioGroup(title: string, hasBorder: bool): PRadioGroup = 
-  result = new(TRadioButton)
+proc createCheckBoxGroup(title: string, hasBorder: bool): PCheckBoxGroup = 
+  result = new(TCheckBoxGroup)
   result.frame = (title: title, hasBorder: hasBorder)
   result.items = @[]
-  result.itemDrawer = PStringItemDrawer()
   result.selectedIndices = @[]
 
-proc createCheckBoxGroupWithFrame*(title: string): PRadioGroup = 
-  return createRadioGroup(title, true)
+proc createCheckBoxGroupWithFrame*(title: string): PCheckBoxGroup = 
+  return createCheckBoxGroup(title, true)
 
-proc createCheckBoxGroupWithoutFrame*(): PRadioGroup = 
-  return createRadioGroup("", false)
+proc createCheckBoxGroupWithoutFrame*(): PCheckBoxGroup = 
+  return createCheckBoxGroup("", false)
 
-proc calcViewSizeForItemList(title: string, items: openarray[string]): tuple[x, y: int] = 
+proc calcViewSizeForItemList(title: string, items: openarray[PUTFString]): tuple[x, y: int] = 
   var maxWidth = 0
   for item in items:
     let w = item.len
     if w > maxWidth:
       maxWidth = w
-  if maxWidth < title.len+2:
-    maxWidth = title.len+2
+  if maxWidth < title.len:
+    maxWidth = title.len
   let yOffset = if title == "": 0 else: 2
-  return (maxWidth+5, items.len+yOffset)
+  let prefixLen = "[ ] ".len
+  return (maxWidth+prefixLen, items.len+yOffset)
 
-proc addItem*[T](self: PRadioGroup, data: T) = 
-  if T is string:
-    self.itemDrawer = PStringItemDrawer()
-  elif T is int:
-    self.itemDrawer = PIntItemDrawer()
-
-  self.items.add(cast[pointer](data))
-  var itemNames: seq[string] = @[]
-  for item in self.items:
-    itemNames.add(self.itemDrawer.itemToString(item) )
+proc addItem*(self: PCheckBoxGroup, data: PUTFString) = 
+  self.items.add(data)
   let title = if self.frame.hasBorder: self.frame.title else: ""
-  let newSize = calcViewSizeForItemList(title, itemNames)
+  let newSize = calcViewSizeForItemList(title, self.items)
   self.setWidthHeight(newSize.x, newSize.y)
   self.selectedIndices.add(false)
 
@@ -121,21 +113,21 @@ when isMainModule:
 
   test "calcViewSizeForItemList must return enough space for title":
     let title = "123éáűúőóüö45678"
-    let a = calcViewSizeForItemList(title, ["1", "23"])
-    check a.x == title.len + " [ ] ".len + 2
+    let a = calcViewSizeForItemList(title, [utf"1", utf"23"])
+    check a.x == title.len + "[ ] ".len
     check a.y == 4
 
   test "calcViewSizeForItemList must return enough space for the longest item":
-    let item = "123éáűúőóüö45678"
-    let a = calcViewSizeForItemList("1", [item, "23"])
-    check a.x == item.len + " [ ] ".len
+    let item = utf"123éáűúőóüö45678"
+    let a = calcViewSizeForItemList("1", [item, utf"23"])
+    check a.x == item.len + "[ ] ".len
     check a.y == 4
 
   test "handle down key":
     var radioGroup = createCheckBoxGroupWithFrame("title")
-    radioGroup.addItem("1")
-    radioGroup.addItem("2")
-    radioGroup.addItem("3")
+    radioGroup.addItem(utf"1")
+    radioGroup.addItem(utf"2")
+    radioGroup.addItem(utf"3")
     check radioGroup.currentRow == 0
     check radioGroup.dirty == false
     radioGroup.handleEvent(PEvent(kind: TEventKind.eventKey, key: TKey.KeyArrowDown))
@@ -148,9 +140,9 @@ when isMainModule:
 
   test "handle up key":
     var radioGroup = createCheckBoxGroupWithFrame("title")
-    radioGroup.addItem("1")
-    radioGroup.addItem("2")
-    radioGroup.addItem("3")
+    radioGroup.addItem(utf"1")
+    radioGroup.addItem(utf"2")
+    radioGroup.addItem(utf"3")
     check radioGroup.currentRow == 0
     check radioGroup.dirty == false
     radioGroup.handleEvent(PEvent(kind: TEventKind.eventKey, key: TKey.KeyArrowUp))
@@ -168,18 +160,18 @@ when isMainModule:
 
   test "Ignores mouse clicks outside its area":
     var radioGroup = createCheckBoxGroupWithFrame("title")
-    radioGroup.addItem("1")
-    radioGroup.addItem("2")
-    radioGroup.addItem("3")
+    radioGroup.addItem(utf"1")
+    radioGroup.addItem(utf"2")
+    radioGroup.addItem(utf"3")
     let event = PEvent(kind: TEventKind.eventMouseButtonDown, localMouseX: 10, localMouseY: 10)
     radioGroup.handleEvent(event)
     check event.kind == TEventKind.eventMouseButtonDown
 
   test "getClickedItemIndex":
-    let radioGroupWithTitle: PRadioGroup = createCheckBoxGroupWithFrame("title")
+    let radioGroupWithTitle: PCheckBoxGroup = createCheckBoxGroupWithFrame("title")
     check radioGroupWithTitle.getClickedItemIndex(2) == 1
     check radioGroupWithTitle.getClickedItemIndex(3) == 2
 
-    let radioGroupWithoutTitle: PRadioGroup = createCheckBoxGroupWithoutFrame()
+    let radioGroupWithoutTitle: PCheckBoxGroup = createCheckBoxGroupWithoutFrame()
     check radioGroupWithoutTitle.getClickedItemIndex(2) == 2
     check radioGroupWithoutTitle.getClickedItemIndex(3) == 3

@@ -48,11 +48,11 @@ proc clickedInResizerCorner(self: PWindow, event: PEvent): bool =
 proc resize(self: PWindow, deltaX, deltaY: int) =
   self.grow(deltaX, deltaY)
 
-proc windowHandleEvent*(self: PWindow, event: PEvent) = 
+proc handleFocusChangeEvents*(self: PView, event: PEvent) =
   case event.kind:
   of TEventKind.eventKey:
     case event.key:
-    of TKey.KeyArrowDown, TKey.KeyArrowRight, TKey.KeyTab:
+    of TKey.KeyArrowDown, TKey.KeyArrowRight, TKey.KeyTab, TKey.KeyEnter:
       self.selectNext()
       self.modified()
       event.setProcessed()
@@ -61,6 +61,12 @@ proc windowHandleEvent*(self: PWindow, event: PEvent) =
       event.setProcessed()
     else:
       discard
+  else:
+    discard
+
+proc windowHandleEvent*(self: PWindow, event: PEvent) = 
+  self.handleFocusChangeEvents(event)
+  case event.kind:
   of TEventKind.eventMouseButtonDown:
     if event.local and self.clickedInFontChooser(event) and self.resizable:
       let fontSize = cast[string](self.executeView(fontSelectBox, self.w-9, 1).data)

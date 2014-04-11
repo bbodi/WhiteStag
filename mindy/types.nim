@@ -1,6 +1,8 @@
 import ../WhiteStagEditor/utfstring
+import ../WhiteStagEditor/panel
 
 type
+  TQuestionUi* = object of TObject
   TQuestionKind* = enum
     qtypeAnd
     qtypeOr
@@ -16,6 +18,9 @@ type
     f*: int
     explanation*: PUTFString
     tag*: PUTFString
+
+method fillEditorPanel*(self: ref TQuestionUi, panel: PPanel, question: ref TQuestion) = quit "to override!"
+method createQuestionFromInput*(self: ref TQuestionUi): ref TQuestion = quit "to override!"
 
 proc getType*(self: ref TQuestion): string =
     result = case self.kind:
