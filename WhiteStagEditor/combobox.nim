@@ -13,14 +13,14 @@ import utfstring
 
 
 type
-  PComboBox* = ref TComboBox
-  TComboBox* = object of TView
-    selectbox*: PSelectBox
+  PComboBox*[T] = ref TComboBox[T]
+  TComboBox*[T] = object of TView
+    selectbox*: PSelectBox[T]
     frame: TWindowFrame
-    data*: PUTFString
+    data*: T
     defaultTitle*: string
 
-proc setSize*(self: PComboBox) =
+proc setSize*[T](self: PComboBox[T]) =
   let w = 
     if not self.data.isNil:
       self.selectbox.getItemWidth(self.data) + 2
@@ -28,7 +28,7 @@ proc setSize*(self: PComboBox) =
       self.defaultTitle.len + 2
   self.setWidthHeight(w, 1)
 
-proc drawSelectedItemToBuffer(self: PComboBox) =
+proc drawSelectedItemToBuffer*[T](self: PComboBox[T]) =
   self.setSize()
   self.buff.clear()
   self.frame.draw(self, self.buff)
@@ -39,21 +39,18 @@ proc drawSelectedItemToBuffer(self: PComboBox) =
     self.buff.writeText(self.buff.w-1, 0, "↓")
 
 
-proc open(self: PComboBox) =
+proc open[T](self: PComboBox[T]) =
   let parentY2 = self.owner.expect("combobox must have a parent when it is drawn").realY2
   var y = 1
   if parentY2 < self.realY + self.selectbox.h:
     y = -self.selectbox.h
   let result = self.executeView(self.selectbox, 3, y)
-  self.data = cast[PUTFString](result.data)
+  self.data = cast[pointer](result.data)
   self.drawSelectedItemToBuffer()
   if result.cmd != cmdOk:
     self.broadcastCommand(result.cmd, result.data)
 
-proc close(self: PComboBox) =
-  discard
-
-proc handleKey*(self: PComboBox, event: PEvent) =
+proc handleKey*[T](self: PComboBox[T], event: PEvent) =
   case event.key:
   of TKey.KeyArrowDown:
     self.open()
@@ -67,10 +64,10 @@ proc handleKey*(self: PComboBox, event: PEvent) =
   else:
     discard
     
-method name(self: PComboBox): string = "ComboBox"
+method name*[T](self: PComboBox[T]): string = "ComboBox"
 
 
-method handleEvent(self: PComboBox, event: PEvent) = 
+method handleEvent*[T](self: PComboBox[T], event: PEvent) = 
   case event.kind:
   of TEventKind.eventMouseButtonDown:
     if event.local:
@@ -82,11 +79,11 @@ method handleEvent(self: PComboBox, event: PEvent) =
   else:
     discard
 
-method draw(self: PComboBox): TDrawBuffer = 
+method draw*[T](self: PComboBox[T]): TDrawBuffer = 
   return self.buff
 
-proc createComboBox*(defaultTitle: string, selectbox: PSelectBox): PComboBox = 
-  result = new(TComboBox)
+proc createComboBox*[T](defaultTitle: string, selectbox: PSelectBox[T]): PComboBox[T] = 
+  result = new(TComboBox[T])
   result.defaultTitle = defaultTitle
   result.selectbox = selectbox
   result.frame = (title: nil, hasBorder: false)

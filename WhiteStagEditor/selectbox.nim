@@ -13,23 +13,23 @@ import utfstring
 # Egyelőre csak UTFStringgel működik. Amint jó lesz a generikus, akkor átírni!
 
 type
-  PSelectItem* = ref TSelectItem
-  TSelectItem* = object
-    data: PUTFString
+  PSelectItem*[T] = ref TSelectItem[T]
+  TSelectItem*[T] = object
+    data: T
     cmd: TCmd
-    childBox: PSelectBox
-    rootBox: PSelectBox
+    childBox: PSelectBox[T]
+    rootBox: PSelectBox[T]
 
-  TSelectBoxItemDrawerFunc* = proc(data: PUTFString, box: TOption[PSelectBox], index: int, buff: var TDrawBuffer)
-  TSelectBoxItemWidthFunc* = proc(data: PUTFString): int
+  #TSelectBoxItemDrawerFunc*[T] = 
+  #TSelectBoxItemWidthFunc*[T] = 
   # TODO: ha működik majd a method -s típussal, akkor írd vissza
-  PSelectBox* = ref TSelectBox
-  TSelectBox* = object of TView
+  PSelectBox*[T] = ref TSelectBox[T]
+  TSelectBox*[T] = object of TView
     frame: TWindowFrame
     selectedIndex*: int # TODO: readonly!
-    items: seq[PSelectItem]
-    selectBoxItemWidthFunc*: TSelectBoxItemWidthFunc
-    selectBoxItemDrawerFunc*: TSelectBoxItemDrawerFunc
+    items: seq[PSelectItem[T]]
+    selectBoxItemWidthFunc*: proc(data: T): int
+    selectBoxItemDrawerFunc*: proc(data: T, box: TOption[PSelectBox[T]], index: int, buff: var TDrawBuffer)
 
 
 proc getClickedItemIndex(self: PSelectBox, mouseY: int): int = 
@@ -115,25 +115,28 @@ method handleEvent(self: PSelectBox, event: PEvent) =
   else:
     discard
 
-proc drawItemTo*(self: PSelectBox, data: PUTFString, buff: var TDrawBuffer) = 
+proc drawItemTo*(self: PSelectBox, data: pointer, buff: var TDrawBuffer) = 
   self.selectBoxItemDrawerFunc(data, none[PSelectBox](), 0, buff)
 
-proc getItem*(self: PSelectBox, index: int): PUTFString = self.items[index].data
+proc getItem*(self: PSelectBox, index: int): pointer = self.items[index].data
 
-proc getItemWidth*(self: PSelectBox, data: PUTFString): int =
+proc getItemWidth*[T](self: PSelectBox[T], data: T): int =
   result = self.selectBoxItemWidthFunc(data)
 
-method draw(self: PSelectBox): TDrawBuffer = 
+method draw*[T](self: PSelectBox[T]): TDrawBuffer = 
   self.frame.draw(self, self.buff)
   for i, item in self.items:
     self.selectBoxItemDrawerFunc(item.data, some(self), i, self.buff)
   return self.buff
 
-proc createSelectBox*(title: string, 
-                      selectBoxItemWidthFunc: TSelectBoxItemWidthFunc, 
-                      selectBoxItemDrawerFunc: TSelectBoxItemDrawerFunc, 
-                      hasBorder: bool = true): PSelectBox = 
-  result = new TSelectBox
+#selectBoxItemWidthFunc*: proc(data: T): int
+#selectBoxItemDrawerFunc*: proc(data: T, box: TOption[PSelectBox[T]], index: int, buff: var TDrawBuffer)
+
+proc createSelectBox*[T](title: string, 
+                      selectBoxItemWidthFunc: proc(data: T): int, 
+                      selectBoxItemDrawerFunc: proc(data: T, box: TOption[PSelectBox[T]], index: int, buff: var TDrawBuffer), 
+                      hasBorder: bool = true): PSelectBox[T] = 
+  result = new TSelectBox[T]
   let w = if hasBorder: title.len+2 else: 0
   let h = if hasBorder: 2 else: 0
   result.setWidthHeight(w, h)
@@ -153,8 +156,8 @@ proc calcViewSizeForItemList*(title: string, items: openarray[string]): tuple[x,
   return (maxWidth+2, items.len+2)
 
 
-proc addItem*(self: PSelectBox, data: ref UTFString, cmd: TCmd): PSelectItem = 
-  let selectItem = new(TSelectItem)
+proc addItem*[T](self: PSelectBox[T], data: T, cmd: TCmd): PSelectItem[T] = 
+  let selectItem = new(TSelectItem[T])
   selectItem.data = data
   selectItem.cmd = cmd
   selectItem.rootBox = self
@@ -168,7 +171,7 @@ proc addItem*(self: PSelectBox, data: ref UTFString, cmd: TCmd): PSelectItem =
   self.modified()
   return selectItem
 
-proc addItem*(self: PSelectBox, data: string, cmd: TCmd): PSelectItem = 
+proc addItem*(self: PSelectBox[PUTFString], data: string, cmd: TCmd): PSelectItem = 
   self.addItem(newString(data), cmd)
 
 proc addItem*(self: PSelectItem, data: string, cmd: TCmd): PSelectItem = 
@@ -179,17 +182,11 @@ proc addItem*(self: PSelectItem, data: string, cmd: TCmd): PSelectItem =
                                     self.rootBox.frame.hasBorder)
   return self.childBox.addItem(data, cmd)
 
-type
-  PStringCellView* = ref TStringCellView
-  TStringCellView* = object of TCellView
-    selectItem: PSelectItem
-    text: string
-
 proc selectBoxStringItemWidth(data: PUTFString): int =
-  return cast[PUTFString](data).len
+  return data.len
 
 
-proc selectBoxStringItemDrawer(text: PUTFString, box: TOption[PSelectBox], index: int, buff: var TDrawBuffer) =
+proc selectBoxStringItemDrawer(data: PUTFString, box: TOption[PSelectBox[PUTFString]], index: int, buff: var TDrawBuffer) =
   let bg = 
     if box.isSome and box.data.selectedIndex == index:
       ColorRed
@@ -198,9 +195,10 @@ proc selectBoxStringItemDrawer(text: PUTFString, box: TOption[PSelectBox], index
     else:
       FrameColor.color(false)
   var y = if box.isSome and box.data.frame.hasBorder: index+1 else: index
-  buff.writeText(1, y, $text, bg = bg)
+  echo repr(data)
+  buff.writeText(1, y, $data, bg = bg)
 
-proc createStringSelectBox*(title: string, hasBorder: bool = true): PSelectBox = createSelectBox(title, selectBoxStringItemWidth, selectBoxStringItemDrawer, hasBorder)
+proc createStringSelectBox*(title: string, hasBorder: bool = true): PSelectBox[PUTFString] = createSelectBox(title, selectBoxStringItemWidth, selectBoxStringItemDrawer, hasBorder)
 
 
 when isMainModule:

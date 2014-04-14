@@ -225,11 +225,8 @@ method handleEvent*(self: PView, event: PEvent) = quit "handleEvent to override!
 
 method draw*(self: PView): TDrawBuffer = quit "draw to override!"
 
-proc createExecutingResult(cmd: TCmd): TExecutingResult =
-  TExecutingResult(cmd: cmd)
-
-proc createExecutingResultWith[T](cmd: TCmd, data: T): TExecutingResult =
-  result = TExecutingResult(cmd: cmd, data: cast[pointer](data))
+proc createExecutingResult(cmd: TCmd, data: pointer): TExecutingResult =
+  TExecutingResult(cmd: cmd, data: data)
 
 proc getInt(self: TExecutingResult): int = 
   cast[int](self.data)
@@ -243,12 +240,12 @@ proc getPtr(self: TExecutingResult): pointer =
 proc stopExecuting*(self: PView, cmd: TCmd) =
   doAssert(self.pExecuting, "View isn't pExecuting!")
   self.pExecuting = false
-  self.executingResult = createExecutingResult(cmd)
+  self.executingResult = createExecutingResult(cmd, nil)
 
 proc stopExecutingWith*[T](self: PView, cmd: TCmd, data: T = nil) =
-  doAssert(self.pExecuting, "View isn't pExecuting!")
+  #doAssert(self.pExecuting, "View isn't pExecuting!")
   self.pExecuting = false
-  self.executingResult = createExecutingResultWith(cmd, data)
+  self.executingResult = createExecutingResult(cmd, cast[pointer](data))
 
 proc isExecuting*(self: PView): bool =
   return self.pExecuting

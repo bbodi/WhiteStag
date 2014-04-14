@@ -54,7 +54,7 @@ method fillEditorPanel*(self: ref TAndOrContainsQuestionUi, panel: PPanel, quest
 
   panel.addView(inputFieldsPanel, 2, self.problemStatementTextArea.y2+2)
 
-  if question != nil:
+  if question != nil and not question.answers.isNil:
     for i, answer in question.answers:
       self.inputFields[i].text = $answer
     self.problemStatementTextArea.text = $question.problemStatement

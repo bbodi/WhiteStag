@@ -9,6 +9,7 @@ import sdlengine
 import selectbox
 import rect
 import pixel
+import utfstring
 
 type
   PWindow* = ref TWindow
@@ -21,12 +22,12 @@ type
     lastMousePosX, lastMousePosY :int
 
 var fontSelectBox = createStringSelectBox("Fonts", false)
-discard fontSelectBox.addItem("12", cmdOk)
-discard fontSelectBox.addItem("14", cmdOk)
-discard fontSelectBox.addItem("16", cmdOk)
-discard fontSelectBox.addItem("18", cmdOk)
-discard fontSelectBox.addItem("20", cmdOk)
-discard fontSelectBox.addItem("22", cmdOk)
+discard fontSelectBox.addItem(utf"12", cmdOk)
+discard fontSelectBox.addItem(utf"14", cmdOk)
+discard fontSelectBox.addItem(utf"16", cmdOk)
+discard fontSelectBox.addItem(utf"18", cmdOk)
+discard fontSelectBox.addItem(utf"20", cmdOk)
+discard fontSelectBox.addItem(utf"22", cmdOk)
 
 method name*(self: PWindow): string = 
   "Window(" & self.frame.title & ")"
@@ -43,6 +44,11 @@ proc clickedInFontChooser(self: PWindow, event: PEvent): bool =
 proc clickedInResizerCorner(self: PWindow, event: PEvent): bool =
   let yOk = event.localMouseY == self.h - 1
   let xOk = event.localMouseX == self.w - 1
+  return yOk and xOk
+
+proc clickedInX(self: PWindow, event: PEvent): bool =
+  let yOk = event.localMouseY == 0
+  let xOk = event.localMouseX == self.w-4
   return yOk and xOk
 
 proc resize(self: PWindow, deltaX, deltaY: int) =
@@ -68,7 +74,11 @@ proc windowHandleEvent*(self: PWindow, event: PEvent) =
   self.handleFocusChangeEvents(event)
   case event.kind:
   of TEventKind.eventMouseButtonDown:
-    if event.local and self.clickedInFontChooser(event) and self.resizable:
+    if event.local and self.clickedInX(event) and self.closeable:
+      if self.owner.isSome:
+        self.owner.data.modified()
+        self.owner.data.removeView(self)
+    elif event.local and self.clickedInFontChooser(event) and self.resizable:
       let fontSize = cast[string](self.executeView(fontSelectBox, self.w-9, 1).data)
       var font: TFont
       case fontSize:

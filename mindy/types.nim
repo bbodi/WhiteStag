@@ -9,7 +9,7 @@ type
     qtypeContains
     qtypeControlledSkipping
     qtypeRandomSkipping
-    qtypeTrueFalse
+    qtypeChoose
     qtypeMirror
   TQuestion* = object
     kind*: TQuestionKind
@@ -29,7 +29,7 @@ proc getType*(self: ref TQuestion): string =
     of qtypeContains: "CONTAINS"
     of qtypeControlledSkipping: "CONTROLLED_SKIPPING"
     of qtypeRandomSkipping: "RANDOM_SKIPPING"
-    of qtypeTrueFalse: "TRUE_FALSE"
+    of qtypeChoose: "CHOOSE"
     of qtypeMirror: "MIRROR"
 
 proc parseType*(str: string): TQuestionKind =
@@ -39,5 +39,5 @@ proc parseType*(str: string): TQuestionKind =
     of "CONTAINS": return qtypeContains
     of "CONTROLLED_SKIPPING": return qtypeControlledSkipping
     of "RANDOM_SKIPPING": return qtypeRandomSkipping
-    of "TRUE_FALSE": return qtypeTrueFalse
+    of "CHOOSE": return qtypeChoose
     of "MIRROR": return qtypeMirror

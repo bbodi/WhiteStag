@@ -29,6 +29,7 @@ import types
 import db
 import andOrContainsPanel
 import choosePanel
+import questionlist
 
 type
   TMindy* = object of TApplication
@@ -54,11 +55,13 @@ const
   H = 40
 
 
-var questionPanel: PPanel
 var questionEditorWindow = createWindow(W - 5, H - 5, "Adding new question")
 questionEditorWindow.closeable = false
 questionEditorWindow.resizable = true
 questionEditorWindow.growMode = {}
+
+var questionPanel = createPanel(questionEditorWindow.w-2, questionEditorWindow.h - 3 - 5)
+questionEditorWindow.addView(questionPanel, 1, 3)
 
 var elozmenyekSelectBox = createStringSelectBox("Előzmények")
 var elozmenyekComboBox = createComboBox("Előzmények", elozmenyekSelectBox)
@@ -114,7 +117,7 @@ for fileName in walkFiles("*.db"):
 var switchUserComboBox = createComboBox("Felhasználó váltása", usersMenu)
 var startButton = createButton("Kezdés", TCmd("Start"))
 var newButton = createButton("Új hozzáadása", TCmd("addNewQuestionClicked"))
-var editButton = createButton("Szerkesztés", TCmd("Start"))
+var editButton = createButton("Szerkesztés", TCmd("listQuestionsClicked"))
 var exitButton = createButton("Kilépés", cmdQuit)
 menuWindow.addViewAtCenter(switchUserComboBox, -3)
 menuWindow.addViewAtCenter(startButton, -1)
@@ -124,12 +127,17 @@ menuWindow.addViewAtCenter(exitButton, 2)
 
 discard deskt.execute()
 
-proc addQuestionPanel(self: ref TMindy, question: ref TQuestion) = 
-  questionPanel = createPanel(questionEditorWindow.w-2, questionEditorWindow.h - 3 - 5)
+proc fillQuestionPanel(self: ref TMindy, question: ref TQuestion) = 
+  case question.kind:
+  of qtypeAnd, qtypeOr, qtypeContains:
+    self.currentQuestionUi = new TAndOrContainsQuestionUi
+  of qtypeChoose:
+    self.currentQuestionUi = new TChoosePanelQuestionUi
+  else:
+    discard
   self.currentQuestionUi.fillEditorPanel(questionPanel, question)
-  questionEditorWindow.addView(questionPanel, 1, 3)
-  if question != nil:
-    tagInputField.text = $question.tag
+  if question != nil and not question.tag.isNil:
+    tagInputField.text = $question.tag    
 
 proc selectUser(self: ref TMindy, username: string) =
   var dao = createDao(username)
@@ -162,12 +170,13 @@ method handleEvent(self: ref TMindy, event: PEvent) =
       deskt.addViewAtCenter(questionEditorWindow)
     of cmdChangeQuestionType:
       let questionType = cast[PUTFString](questionTypeComboBox.data)
+      let newQuestion = new TQuestion
       case $questionType:
       of "And, Or, Contains":
-        self.currentQuestionUi = new TAndOrContainsQuestionUi
+        newQuestion.kind = TQuestionKind.qtypeAnd
       of "Choose":
-        self.currentQuestionUi = new TChoosePanelQuestionUi
-      self.addQuestionPanel(nil)
+        newQuestion.kind = TQuestionKind.qtypeChoose
+      self.fillQuestionPanel(newQuestion)
     of cmdEditQuestionCancel:
       if not questionPanel.isNil and questionPanel.hasOwner:
         questionEditorWindow.removeView(questionPanel)
@@ -179,6 +188,18 @@ method handleEvent(self: ref TMindy, event: PEvent) =
       discard elozmenyekSelectBox.addItem(elozmenyText, TCmd("cmdElozmenyClicked"))
       self.questions.add(question)
       questionEditorWindow.removeView(questionPanel)
-      self.addQuestionPanel(nil)
+      let newQuestion = new TQuestion
+      newQuestion.kind = question.kind
+      self.fillQuestionPanel(newQuestion)
+    of TCmd("cmdElozmenyClicked"):
+      let selectedQuestion = cast[ref TQuestion](elozmenyekComboBox.data)
+      self.fillQuestionPanel(selectedQuestion)
+    of TCmd("listQuestionsClicked"):
+      let win = createWindow(W - 5, H - 5, "Question list")
+      win.closeable = true
+      let list = createQuestionList(win.w-2, win.h-2)
+      for q in self.questions:
+        list.addItem(q)
+      deskt.addViewAtCenter(win)
   else:
     discard

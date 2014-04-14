@@ -79,7 +79,7 @@ proc handleKey*(self: PList, event: PEvent) =
   else:
     discard
 
-proc isSelected(self: PList, cellView: PListCellView): bool =
+proc isSelected*(self: PList, cellView: PListCellView): bool =
   result = 
     if self.pSelectedIndex.isSome():
       self.cellViews[self.pSelectedIndex.data()] == cellView
@@ -118,7 +118,7 @@ method draw(self: PList): TDrawBuffer =
   self.buff.setCells(0, 0, self.w, self.w, bg = PanelColor.color(self.isFocused))
   return self.buff
 
-proc createList*(cellViewFactoy: TListCellViewFactoryMethod, w, h: int,): PList = 
+proc createList*(cellViewFactoy: TListCellViewFactoryMethod, w, h: int): PList = 
   result = new(TList)
   result.setWidthHeight(w, h)
   result.nodes = @[]
@@ -179,7 +179,7 @@ method draw(self: PStringCellView): TDrawBuffer =
   self.buff.writeText(0, 0, self.data, fg = textColor)
   return self.buff
 
-proc createStringCellView(w, h: int): PStringCellView {.procvar.} = 
+proc createStringCellView(w, h: int): PListCellView {.procvar.} = 
   result = new(TStringCellView)
   result.setWidthHeight(w, 1)
 
