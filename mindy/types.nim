@@ -1,5 +1,6 @@
 import ../WhiteStagEditor/utfstring
 import ../WhiteStagEditor/panel
+import ../WhiteStagEditor/option
 
 type
   TQuestionUi* = object of TObject
@@ -12,6 +13,7 @@ type
     qtypeChoose
     qtypeMirror
   TQuestion* = object
+    id*: TOption[int] # TODO: if I change it to int64, the program crashes...
     kind*: TQuestionKind
     problemStatement*: PUTFString
     answers*: seq[PUTFString]

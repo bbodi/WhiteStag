@@ -35,6 +35,7 @@ type
   TMindy* = object of TApplication
     currentQuestionUi: ref TQuestionUi
     questions: seq[ref TQuestion]
+    dao: ref TDao
 
 
 const
@@ -63,7 +64,9 @@ questionEditorWindow.growMode = {}
 var questionPanel = createPanel(questionEditorWindow.w-2, questionEditorWindow.h - 3 - 5)
 questionEditorWindow.addView(questionPanel, 1, 3)
 
-var elozmenyekSelectBox = createStringSelectBox("Előzmények")
+var elozmenyekSelectBox = createStringSelectBox("Előzmények", true) do (data) -> string:
+    let question = cast[ref TQuestion](data)
+    result = $(question.problemStatement.substring(0, 30) & "...")
 var elozmenyekComboBox = createComboBox("Előzmények", elozmenyekSelectBox)
 
 var questionTypeSelectBox = createStringSelectBox("Type")
@@ -126,8 +129,10 @@ menuWindow.addViewAtCenter(editButton, 1)
 menuWindow.addViewAtCenter(exitButton, 2)
 
 discard deskt.execute()
+if application.isNil == false:
+  application.dao.close()
 
-proc fillQuestionPanel(self: ref TMindy, question: ref TQuestion) = 
+proc fillEditQuestionPanel(self: ref TMindy, question: ref TQuestion) = 
   case question.kind:
   of qtypeAnd, qtypeOr, qtypeContains:
     self.currentQuestionUi = new TAndOrContainsQuestionUi
@@ -140,10 +145,22 @@ proc fillQuestionPanel(self: ref TMindy, question: ref TQuestion) =
     tagInputField.text = $question.tag    
 
 proc selectUser(self: ref TMindy, username: string) =
-  var dao = createDao(username)
+  if application.dao.isNil == false:
+    application.dao.close()
+  self.dao = createDao(username)
+  self.questions = self.dao.findAllQuestion()
+  echo repr(self.questions)
       
   menuWindow.title = username
   menuWindow.modified()
+
+proc saveEditedQuestion(self: ref TMindy): ref TQuestion =
+  let question = self.currentQuestionUi.createQuestionFromInput()
+  question.tag = tagInputField.utftext
+  let elozmenyText = question.problemStatement.substring(0, 30) & "..."
+  discard elozmenyekSelectBox.addItem(question, TCmd("cmdElozmenyClicked"))
+  self.questions.add(question)
+  return question
 
 method handleEvent(self: ref TMindy, event: PEvent) = 
   case event.kind:
@@ -176,24 +193,20 @@ method handleEvent(self: ref TMindy, event: PEvent) =
         newQuestion.kind = TQuestionKind.qtypeAnd
       of "Choose":
         newQuestion.kind = TQuestionKind.qtypeChoose
-      self.fillQuestionPanel(newQuestion)
+      self.fillEditQuestionPanel(newQuestion)
     of cmdEditQuestionCancel:
       if not questionPanel.isNil and questionPanel.hasOwner:
         questionEditorWindow.removeView(questionPanel)
       deskt.removeView(questionEditorWindow)
     of cmdEditQuestionOk:
-      let question = self.currentQuestionUi.createQuestionFromInput()
-      question.tag = tagInputField.utftext
-      let elozmenyText = question.problemStatement.substring(0, 30) & "..."
-      discard elozmenyekSelectBox.addItem(elozmenyText, TCmd("cmdElozmenyClicked"))
-      self.questions.add(question)
-      questionEditorWindow.removeView(questionPanel)
+      let editedQuestion = self.saveEditedQuestion()
+      self.dao.insertQuestion(editedQuestion)
       let newQuestion = new TQuestion
-      newQuestion.kind = question.kind
-      self.fillQuestionPanel(newQuestion)
+      newQuestion.kind = editedQuestion.kind
+      self.fillEditQuestionPanel(newQuestion)
     of TCmd("cmdElozmenyClicked"):
       let selectedQuestion = cast[ref TQuestion](elozmenyekComboBox.data)
-      self.fillQuestionPanel(selectedQuestion)
+      self.fillEditQuestionPanel(selectedQuestion)
     of TCmd("listQuestionsClicked"):
       let win = createWindow(W - 5, H - 5, "Question list")
       win.closeable = true

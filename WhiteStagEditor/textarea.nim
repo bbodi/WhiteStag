@@ -595,11 +595,18 @@ when isMainModule:
       textArea.text = "áá"
       textArea.cursorPos.x = 1
       check textArea.cursorPos.y == 0
-      textArea.handleEvent(PEvent(kind: TEventKind.eventKey, key: TKey.KeyEnter))
+      let event = PEvent(kind: TEventKind.eventKey, key: TKey.KeyEnter)
+      textArea.handleEvent(event)
+      check event.kind == TEventKind.eventKey
       check textArea.text == "áá"
       check textArea.cursorPos == (1, 0)
       check textArea.lines.len == 1
       check textArea.lines[0] == "áá"
+
+    test "handle enter":
+      let event = PEvent(kind: TEventKind.eventKey, key: TKey.KeyEnter)
+      textArea.handleEvent(event)
+      check event.kind == TEventKind.eventNothing
 
     test "insert tab":
       textArea.text = "áá"

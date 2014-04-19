@@ -225,8 +225,11 @@ method handleEvent*(self: PView, event: PEvent) = quit "handleEvent to override!
 
 method draw*(self: PView): TDrawBuffer = quit "draw to override!"
 
-proc createExecutingResult(cmd: TCmd, data: pointer): TExecutingResult =
-  TExecutingResult(cmd: cmd, data: data)
+proc createExecutingResult(cmd: TCmd): TExecutingResult =
+  TExecutingResult(cmd: cmd)
+
+proc createExecutingResult[T](cmd: TCmd, data: T): TExecutingResult =
+  TExecutingResult(cmd: cmd, data: cast[pointer](data))
 
 proc getInt(self: TExecutingResult): int = 
   cast[int](self.data)
@@ -240,12 +243,12 @@ proc getPtr(self: TExecutingResult): pointer =
 proc stopExecuting*(self: PView, cmd: TCmd) =
   doAssert(self.pExecuting, "View isn't pExecuting!")
   self.pExecuting = false
-  self.executingResult = createExecutingResult(cmd, nil)
+  self.executingResult = createExecutingResult(cmd)
 
 proc stopExecutingWith*[T](self: PView, cmd: TCmd, data: T = nil) =
   #doAssert(self.pExecuting, "View isn't pExecuting!")
   self.pExecuting = false
-  self.executingResult = createExecutingResult(cmd, cast[pointer](data))
+  self.executingResult = createExecutingResult(cmd, data)
 
 proc isExecuting*(self: PView): bool =
   return self.pExecuting
@@ -613,6 +616,27 @@ proc newDoubleClickEvent*(x, y: int): PEvent =
 when isMainModule:
   import unittest
 
+  proc checkViewOrder(v0: PView, childs: varargs[PView]) =
+    let lastChild = childs[childs.len-1]
+
+    check v0.pBottomViewOpt.data == childs[0]
+    check v0.pTopViewOpt.data == lastChild
+    check childs[0].prevViewOpt.isNone
+
+    for i, child in childs:
+      if i > 0:
+        check child.prevViewOpt.isSome
+        check child.prevViewOpt.data == childs[i-1]
+      if i < childs.len-1:
+        if child.nextViewOpt.isNone:
+          echo ($i & ". " & child.name & " nextViewOpt")
+          check false
+        check(child.nextViewOpt.data == childs[i+1])
+
+    if childs.len > 1:
+      check lastChild.prevViewOpt.data == childs[childs.len-2]
+    check lastChild.nextViewOpt.isNone
+
   suite "View Test Suite":
     setup:
       var drawList: seq[PView] = @[]
@@ -630,24 +654,6 @@ when isMainModule:
       var v5: PView = testv5
       testDrawingOrder = nil
       testEventHandlingOrder = nil
-
-    proc checkViewOrder(v0: PView, childs: varargs[PView]) =
-      let lastChild = childs[childs.len-1]
-
-      check v0.pBottomViewOpt.data == childs[0]
-      check v0.pTopViewOpt.data == lastChild
-      check childs[0].prevViewOpt.isNone
-
-      for i, child in childs:
-        if i > 0:
-          check child.prevViewOpt.isSome
-          check child.prevViewOpt.data == childs[i-1]
-        if i < childs.len-1:
-          check child.nextViewOpt.expect($i & ". " & child.name & " nextViewOpt") == childs[i+1]
-
-      if childs.len > 1:
-        check lastChild.prevViewOpt.data == childs[childs.len-2]
-      check lastChild.nextViewOpt.isNone
 
     test "test Ref Equality":
       check v0 != v1

@@ -113,7 +113,9 @@ proc remove*(self: ref UTFString, fromIndex: int, toIndex : int = -1) =
     self.chars.delete(fromIndex)
 
 proc `$`*(self: ref UTFString): string =
-  self.strFromRunes()
+  if self.isNil:
+    return ""
+  return self.strFromRunes()
 
 when isMainModule:
   import unittest
@@ -217,3 +219,7 @@ when isMainModule:
       check str.substring(12) == ""
       check str.substring(0, 100) == "éáő abcd def"
       check newString("1").substring(0, 30) == "1"
+
+    test "$nil":
+      var str: ref UTFString = nil
+      check ($str == "")
