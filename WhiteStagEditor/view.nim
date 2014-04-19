@@ -246,7 +246,7 @@ proc stopExecuting*(self: PView, cmd: TCmd) =
   self.executingResult = createExecutingResult(cmd)
 
 proc stopExecutingWith*[T](self: PView, cmd: TCmd, data: T = nil) =
-  #doAssert(self.pExecuting, "View isn't pExecuting!")
+  doAssert(self.pExecuting, "View isn't pExecuting!")
   self.pExecuting = false
   self.executingResult = createExecutingResult(cmd, data)
 
