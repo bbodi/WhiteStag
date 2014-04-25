@@ -12,8 +12,9 @@ type
     qtypeRandomSkipping
     qtypeChoose
     qtypeMirror
+
   TQuestion* = object
-    id*: TOption[int] # TODO: if I change it to int64, the program crashes...
+    id*: TOption[int64]
     kind*: TQuestionKind
     problemStatement*: PUTFString
     answers*: seq[PUTFString]

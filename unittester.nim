@@ -61,6 +61,7 @@ for fullName in walkDirRec("."):
     echo "SKIP COMPILING " & moduleName
     compiledModules.add(moduleName)
     continue
+  echo "COMPILING " & moduleName
   if execCmd("nimrod c --verbosity:0 " & moduleName) != 0:
     quit 1
   compiledModules.add(moduleName)

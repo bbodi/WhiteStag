@@ -41,7 +41,7 @@ proc createDao*(dbName: string): ref TDao =
 proc close*(self: ref TDao) =
   self.conn.close()
 
-proc findQuestionById*(self: ref TDao, id: int): ref TQuestion =
+proc findQuestionById*(self: ref TDao, id: int64): ref TQuestion =
   let row = self.conn.getRow(db_sqlite.sql"SELECT question, type, f, tag, expl FROM question WHERE id = ?", id)
   result = new TQuestion
   result.problemStatement = newString(row[0])
@@ -65,7 +65,7 @@ proc findAllQuestion*(self: ref TDao): seq[ref TQuestion] =
     echo "b"
     echo repr(some[int](1))
     echo "c"
-    q.id = some(parseInt(row[0]))
+    q.id = some(cast[int64](parseInt(row[0])))
     echo repr(q)
     q.problemStatement = newString(row[1])
     q.kind = parseType(row[2])
@@ -87,7 +87,7 @@ proc insertAnswers(self: ref TDao, q: ref TQuestion) =
 proc insertQuestion*(self: ref TDao, q: ref TQuestion) =
   let questionId = self.conn.insertID(db_sqlite.sql"""INSERT INTO question (question, type, f, expl, tag) VALUES (?, ?, ?, ?, ?)""",
       q.problemStatement, q.getType(), q.f, q.explanation, q.tag)
-  q.id = some(cast[int](questionId))
+  q.id = some(cast[int64](questionId))
   self.insertAnswers(q)
 
 proc updateQuestion*(self: ref TDao, q: ref TQuestion) =
@@ -165,9 +165,9 @@ when isMainModule:
       q.tag = utf"tag"
       q.answers = @[utf"a", utf"b"]
       dao.insertQuestion(q)
-      q.id = none[int]()
+      q.id = none[int64]()
       dao.insertQuestion(q)
-      q.id = none[int]()
+      q.id = none[int64]()
       dao.insertQuestion(q)
 
       let qs = dao.findAllQuestion()
