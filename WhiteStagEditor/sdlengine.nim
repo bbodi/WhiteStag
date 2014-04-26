@@ -1,7 +1,7 @@
 when defined(windows):
   import windows
 else:
-  quit "Currently only windows is supported!"
+  #quit "Currently only windows is supported!"
 import sdl_ttf
 import sdl
 
@@ -327,16 +327,17 @@ proc pollEvent*(self: PSdlEngine): event.PEvent =
 
 proc readClipBoard*(self: PSdlEngine): PUTFString = 
   result = utf""
-  if OpenClipboard(0) != 0:
-    let clip = GetClipboardData(CF_UNICODETEXT)
-    var clipPtr = cast[TAddress](clip)
-    while true:
-      let rune = TRune(cast[PWideChar](clipPtr)[])
-      if rune == TRune(0):
-        break
-      result.append(rune)
-      clipPtr = clipPtr + sizeof(int16)
-  discard CloseClipboard()
+  when defined(Windows):
+    if OpenClipboard(0) != 0:
+      let clip = GetClipboardData(CF_UNICODETEXT)
+      var clipPtr = cast[TAddress](clip)
+      while true:
+        let rune = TRune(cast[PWideChar](clipPtr)[])
+        if rune == TRune(0):
+          break
+        result.append(rune)
+        clipPtr = clipPtr + sizeof(int16)
+    discard CloseClipboard()
 
 when isMainModule:
   import unittest
