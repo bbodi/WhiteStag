@@ -62,9 +62,7 @@ questionEditorWindow.resizable = true
 questionEditorWindow.growMode = {}
 
 var questionPanel = createPanel(questionEditorWindow.w-2, questionEditorWindow.h - 3 - 5)
-import macros
-dumpLisp:
-  questionEditorWindow.addView(questionPanel, 1, 3)
+questionEditorWindow.addView(questionPanel, 1, 3)
 
 var elozmenyekSelectBox = createStringSelectBox("Előzmények", true) do (data) -> string:
     let question = cast[ref TQuestion](data)

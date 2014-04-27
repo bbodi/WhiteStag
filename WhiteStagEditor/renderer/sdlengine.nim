@@ -33,9 +33,9 @@ type
     font20*: TFont
     font22*: TFont
 
-method isInitialized*(self: PSdlEngine): bool = return inited
+proc isInitialized*(self: PSdlEngine): bool = return inited
 
-method clear*(self: PSdlEngine) = 
+proc clear*(self: PSdlEngine) = 
   discard sdl.fillRect(self.screen, nil, 0x000000)
 
 proc loadSdlFont(fileName: string, size: cint): sdl_ttf.PFont  =
@@ -43,7 +43,7 @@ proc loadSdlFont(fileName: string, size: cint): sdl_ttf.PFont  =
   doAssert(font != nil, "Cannot open font: " & fileName & ", size: " & $int(size))
   return font
 
-method loadFont*(self: PSdlEngine, size: int, name: string = "DejaVuSansMono"): TFont = 
+proc loadFont*(self: PSdlEngine, size: int, name: string = "DejaVuSansMono"): TFont = 
   var font: TFont
   font.normalSdlFont = loadSdlFont(name & ".ttf", cint(size))
 
@@ -58,7 +58,10 @@ method loadFont*(self: PSdlEngine, size: int, name: string = "DejaVuSansMono"): 
   font.size = size
   return font
 
-method init*(engine: PSdlEngine, w, h: int, fontSize: int) = 
+
+proc init*(w, h: int, fontSize: int): PSdlEngine = 
+  doAssert(inited == false)
+  var engine = new(TSdlEngine)
   engine.w = w
   engine.h = h
 
@@ -81,13 +84,12 @@ method init*(engine: PSdlEngine, w, h: int, fontSize: int) =
   engine.font22 = engine.loadFont(22)
 
   inited = true
+  return engine
 
-proc init*(w, h: int, fontSize: int): PSdlEngine =
-  doAssert(inited == false)
-  result = new(TSdlEngine)
-  result.init(w, h, fontSize)
 
-method swapBackBuffer*(self: PSdlEngine) =
+
+
+proc swapBackBuffer*(self: PSdlEngine) =
   discard self.screen.flip()
 
 proc createSdlColor(sur: PSurface, c: color.TColor, alpha: int = 0): int32 =
@@ -104,7 +106,9 @@ proc drawRects(self: PSdlEngine, rects: openarray[TDrawingRect]) =
     self.drawRect(rect)
   
 
-proc toSdlColor(c: color.TColor): sdl.TColor =
+
+
+proc toSdlColor*(c: color.TColor): sdl.TColor =
   result.r = c.r
   result.g = c.g
   result.b = c.b
@@ -130,7 +134,7 @@ proc drawTexts(self: PSdlEngine, texts: seq[TDrawingText]) =
   for textRect in texts:
     self.drawString(textRect)
 
-method drawToBackBuffer*(self: PSdlEngine, buff: TDrawBuffer, offsetX, offsetY: TPixel, font: TFont, clippingArea: TPixelRect) = 
+proc drawToBackBuffer*(self: PSdlEngine, buff: TDrawBuffer, offsetX, offsetY: TPixel, font: TFont, clippingArea: TPixelRect) = 
   let backgroundRects = collectPixelBasedRegions(buff, offsetX, offsetY, font)
 
   var sdlClippingRect = sdl.TRect(x: int16(clippingArea.x), y: int16(clippingArea.y), w: uint16(clippingArea.w), h: uint16(clippingArea.h))
@@ -314,14 +318,14 @@ proc readSdlEvent(self: PSdlEngine): sdl.PEvent =
     sdl.Delay(10)
   return addr self.sdlEvent
 
-method pollEvent*(self: PSdlEngine): event.PEvent =
+proc pollEvent*(self: PSdlEngine): event.PEvent =
   while true:
     let sdlEvent = self.readSdlEvent()
     let event = self.processSdlEvent(sdlEvent)
     if event != nil:
       return event
 
-method readClipBoard*(self: PSdlEngine): PUTFString = 
+proc readClipBoard*(self: PSdlEngine): PUTFString = 
   result = utf""
   if OpenClipboard(0) != 0:
     let clip = GetClipboardData(CF_UNICODETEXT)
