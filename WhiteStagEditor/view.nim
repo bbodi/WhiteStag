@@ -117,6 +117,8 @@ const
   # TextArea szöveg  szine
   TextPanelColor*        = (first: ColorBlue, second: ColorBlue)
   TextPanelTextColor*        = (first: ColorWhite, second: ColorWhite)
+  LineNumberBgColors*        = (first: ColorCyan, second: ColorCyan)
+  LineNumberFgColors*        = (first: ColorBlack, second: ColorBlack)
 
 
 method writeData*(self: PView, stream: PStream) = discard

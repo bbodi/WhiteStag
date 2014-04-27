@@ -1,3 +1,5 @@
+import unicode
+
 when defined(windows):
   import windows
 else:
@@ -5,15 +7,14 @@ else:
 import sdl_ttf
 import sdl
 
-import pixel
-import drawbuffer
-import rect
-import color
-import font
-import event
-import utfstring
-import renderer
-import unicode
+import ../pixel
+import ../drawbuffer
+import ../rect
+import ../color
+import ../font
+import ../event
+import ../utfstring
+import ../renderer
 
 var inited: bool
 

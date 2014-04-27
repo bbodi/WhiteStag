@@ -28,13 +28,21 @@ proc setRange*(self: PScrollBar, min, max: int) =
   self.maxValue = max
   self.step = int((max-min) / self.h)
 
-proc moveDown*(self: PScrollBar) = 
+proc `value`*(self: PScrollBar): int = self.currentValue
+
+proc `value=`*(self: PScrollBar, value: int) =
+  self.currentValue = value
+
+proc `add`*(self: PScrollBar, value: int) =
+  inc self.currentValue, value
+
+proc moveDown(self: PScrollBar) = 
   self.currentValue += self.step
 
-proc moveUp*(self: PScrollBar) = 
+proc moveUp(self: PScrollBar) = 
   self.currentValue -= self.step
 
-proc getPosition*(self: PScrollBar, minVal, maxVal, curVal: int): int = 
+proc getPosition(self: PScrollBar, minVal, maxVal, curVal: int): int = 
   let valuesRange =  maxVal - minVal
   if valuesRange == 0:
     return 0
@@ -65,7 +73,7 @@ method draw*(self: PScrollBar): TDrawBuffer =
   buff.setCell(0, 1 + 1 + pos, ch = "X")
   return buff
 
-proc AddScrollBarToRight*(view: PView): PScrollBar = 
+proc addScrollBarToRight*(view: PView): PScrollBar = 
   let scrollBar = new(TScrollBar)
   scrollbar.setWidthHeight(1, view.h-1)
   let x = view.w-1

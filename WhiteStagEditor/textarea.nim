@@ -10,6 +10,7 @@ import event
 import option
 import sdlengine
 import rect
+import scrollbar
 
 type
   PTextArea* = ref TTextArea
@@ -19,6 +20,8 @@ type
     showCursor: bool
     dontHandleControlKeys*: bool
     selectRegionStart: TPoint
+    verticalScrollbar: PScrollBar
+    showLineNumbers*: bool
 
   TSelectionCoord* = tuple[startPos: TPoint, endPos: TPoint]
   TTextDrawer = object
@@ -63,6 +66,15 @@ proc findLastWhiteSpace(str: PUTFString, runePos: int): int =
     inc pos
   return pos
 
+proc handleScrollbarOnContentChange(self: PTextArea) =
+  let requiresVerticalScrollbar = self.h < self.lines.len
+  if requiresVerticalScrollbar:
+    self.verticalScrollbar.show()
+    self.verticalScrollbar.setRange(0, self.lines.len)
+  else:
+    self.verticalScrollbar.hide()
+  
+
 proc updateText(self: PTextArea, cstr: string) =
   self.lines = @[]
   var str = newString(cstr)
@@ -78,10 +90,18 @@ proc updateText(self: PTextArea, cstr: string) =
       currentLineText &= ch
     inc i
   self.lines.add(newString(currentLineText))
+  self.handleScrollbarOnContentChange()
+
+proc loadText*(self: PTextArea, stream: PStream) =
+  var line: string = ""
+  while (stream.readLine(line)):
+    self.lines.add(newString(line))
+  self.handleScrollbarOnContentChange()
 
 proc appendCharAtCursor(self: PTextArea, ch: TRune) =
   self.lines[self.cursorPos.y].insert(ch, self.cursorPos.x)
   inc self.cursorPos.x
+  self.handleScrollbarOnContentChange()
 
 proc append*(self: PTextArea, str: ref UTFString) =  
   var i = 0
@@ -96,6 +116,7 @@ proc append*(self: PTextArea, str: ref UTFString) =
     else:
       self.appendCharAtCursor(rune)
     inc i
+  self.handleScrollbarOnContentChange()
 
 proc append*(self: PTextArea, cstr: string) =  
   self.append(newString(cstr))
@@ -126,6 +147,14 @@ proc clearSelection(self: PTextArea) =
 
 proc handleMouse(self: PTextArea, event: PEvent) =
   discard
+
+proc synchronizeScrollbarsWithCursor(self: PTextArea) =
+  let y = self.cursorPos.y
+  let scrollY = self.verticalScrollbar.value
+  if y >= self.h + scrollY:
+    self.verticalScrollbar.add 1
+  elif y < scrollY:
+    self.verticalScrollbar.add(-1)
 
 proc handleCursorMoving*(self:PTextArea, event: PEvent) =
   let currentLineText = self.lines[self.cursorPos.y]
@@ -175,7 +204,7 @@ proc handleCursorMoving*(self:PTextArea, event: PEvent) =
     let newLineText = self.lines[self.cursorPos.y]
     if newLineText.len <= self.cursorPos.x:
       self.cursorPos.x = newLineText.len
-
+  self.synchronizeScrollbarsWithCursor()
   if self.cursorPos == self.selectRegionStart:
     self.clearSelection()
 
@@ -344,22 +373,23 @@ proc createTextDrawer(textArea: PTextArea): ref TTextDrawer =
   result.selection = convertSelectedRegionToCoords(textArea)
   result.textArea = textArea
 
-proc drawCursorIfNeeded(self: ref TTextDrawer, buff: var TDrawBuffer) =
-  let isCurrentRow = self.yPos == self.textArea.cursorPos.y
-  let isCurrentColumn = self.horizontalIndex == self.textArea.cursorPos.x
-  if isCurrentRow and isCurrentColumn and self.textArea.showCursor and self.textArea.isActive:
-    buff.setCell(self.xPos, self.yPos, bg = ColorRed)
+proc drawCursorIfNeeded(drawer: ref TTextDrawer, buff: var TDrawBuffer) =
+  let isCurrentRow = drawer.yPos == drawer.textArea.cursorPos.y
+  let isCurrentColumn = drawer.horizontalIndex == drawer.textArea.cursorPos.x
+  if isCurrentRow and isCurrentColumn and drawer.textArea.showCursor and drawer.textArea.isActive:
+    let cursorDrawingPosY = drawer.yPos - drawer.textArea.verticalScrollbar.value
+    buff.setCell(drawer.xPos, cursorDrawingPosY, bg = ColorRed)
 
-proc drawChar(self: ref TTextDrawer, charToDraw: string, buff: var TDrawBuffer) =
-  buff.writeText(self.xPos, self.yPos, charToDraw, fg = TextPanelTextColor.color(self.textArea.isActive))
-  let selection = self.selection;
-  if self.selection.startPos.x != -1:
-    let oneLineSelection = self.yPos == selection.startPos.y and self.yPos == selection.endPos.y
-    let xIsOk = self.horizontalIndex >= selection.startPos.x and self.horizontalIndex < selection.endPos.x
+proc drawChar(drawer: ref TTextDrawer, charToDraw: string, buff: var TDrawBuffer) =
+  buff.writeText(drawer.xPos, drawer.yPos, charToDraw, fg = TextPanelTextColor.color(drawer.textArea.isActive))
+  let selection = drawer.selection;
+  if drawer.selection.startPos.x != -1:
+    let oneLineSelection = drawer.yPos == selection.startPos.y and drawer.yPos == selection.endPos.y
+    let xIsOk = drawer.horizontalIndex >= selection.startPos.x and drawer.horizontalIndex < selection.endPos.x
 
-    let firstSelectedLine = self.yPos == selection.startPos.y and self.horizontalIndex >= selection.startPos.x
-    let middleSelectedLine = self.yPos > selection.startPos.y and self.yPos < selection.endPos.y
-    let lastSelectedLine = self.yPos == selection.endPos.y and self.horizontalIndex < selection.endPos.x
+    let firstSelectedLine = drawer.yPos == selection.startPos.y and drawer.horizontalIndex >= selection.startPos.x
+    let middleSelectedLine = drawer.yPos > selection.startPos.y and drawer.yPos < selection.endPos.y
+    let lastSelectedLine = drawer.yPos == selection.endPos.y and drawer.horizontalIndex < selection.endPos.x
     var needHighlight = false
     if oneLineSelection:
       if xIsOk:
@@ -367,25 +397,34 @@ proc drawChar(self: ref TTextDrawer, charToDraw: string, buff: var TDrawBuffer) 
     elif firstSelectedLine or middleSelectedLine or lastSelectedLine:
       needHighlight = true
     if needHighlight:
-      buff.setCell(self.xPos, self.yPos, bg = ColorGreen)
-  self.drawCursorIfNeeded(buff)
-  inc self.xPos
+      buff.setCell(drawer.xPos, drawer.yPos, bg = ColorGreen)
+  drawer.drawCursorIfNeeded(buff)
+  inc drawer.xPos
 
-proc draw(self: ref TTextDrawer, buff: var TDrawBuffer) =
-  self.yPos = -1
-  for line in self.textArea.lines:
-    inc self.yPos
-    self.xPos = 0
-    self.horizontalIndex = 0
+proc draw(drawer: ref TTextDrawer, buff: var TDrawBuffer) =
+  drawer.yPos = -1
+  let fromIndex = drawer.textArea.verticalScrollbar.value
+  let toIndex = drawer.textArea.lines.len
+  let numberOflastLine = fromIndex + drawer.textArea.h
+  let maxLineNumberWidth = ($numberOflastLine).len
+  for index, line in drawer.textArea.lines[fromIndex.. <toIndex]:
+    inc drawer.yPos
+    if drawer.textArea.showLineNumbers:
+      drawer.xPos = maxLineNumberWidth
+      buff.setCells(0, drawer.yPos, maxLineNumberWidth, 1, bg = LineNumberBgColors.color(drawer.textArea.isActive))
+      buff.writeText(0, drawer.yPos, $(index+fromIndex), fg = LineNumberFgColors.color(drawer.textArea.isActive), bg=LineNumberBgColors.color(drawer.textArea.isActive))
+    else:
+      drawer.xPos = 0
+    drawer.horizontalIndex = 0
     for i in 0..line.len-1:
       let ch = line.at(i)
       if ch == "\t":
         for j in 0..3:
-          self.drawChar(" ", buff)
+          drawer.drawChar(" ", buff)
       else:
-        self.drawChar(ch, buff)
-      inc self.horizontalIndex
-    self.drawCursorIfNeeded(buff)
+        drawer.drawChar(ch, buff)
+      inc drawer.horizontalIndex
+    drawer.drawCursorIfNeeded(buff)
     
 
 method draw*(self: PTextArea): TDrawBuffer = 
@@ -398,6 +437,7 @@ proc createTextArea*(w, h: int): PTextArea =
   result = new(TTextArea)
   result.selectRegionStart = (-1, -1)
   result.setWidthHeight(w, h)
+  result.verticalScrollbar = result.addScrollBarToRight()
   result.text = ""
   result.dontChangePositionWhenReceiveFocus = true
 
