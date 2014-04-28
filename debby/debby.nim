@@ -2,7 +2,6 @@ import os
 import streams
 
 import ../WhiteStagEditor/window
-import ../WhiteStagEditor/sdlengine
 import ../WhiteStagEditor/view
 import ../WhiteStagEditor/pixel
 import ../WhiteStagEditor/option

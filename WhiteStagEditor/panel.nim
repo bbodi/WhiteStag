@@ -5,8 +5,6 @@ import color
 import drawbuffer
 import event
 import option
-import sdlengine
-import selectbox
 import rect
 import pixel
 import window

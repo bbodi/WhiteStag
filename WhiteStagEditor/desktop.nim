@@ -4,12 +4,12 @@ import color
 import drawbuffer
 import event
 import pixel
-import sdlengine
 import option
 import rect
 import helpline
 import dialog
 import textfield
+import engine
 
 
 type
@@ -41,7 +41,7 @@ method handleEvent*(self: PDesktop, event: PEvent) =
     discard
 
 method draw*(self: PDesktop): TDrawBuffer = 
-  engine.clear()
+  gEngine.clearScreen()
 
 proc showStringDialog*(self: PDesktop, title: string, defaultText: string = ""): string =
   let w = self.w div 3
@@ -57,11 +57,11 @@ proc showStringDialog*(self: PDesktop, title: string, defaultText: string = ""):
   return data
 
 proc createDesktop*(app: PApplication, w, h: int, fontSize: int): PDesktop = 
-  if engine == nil:
-    engine = sdlengine.init(w, h, fontSize)
+  if gEngine == nil:
+    engine.initSdlEngine(w, h, fontSize)
   result = TDesktop.new
   result.setWidthHeight(w, h)
-  result.font = some(engine.loadFont(fontSize))
+  result.font = some(gEngine.loadFont(fontSize))
   let helpline = createHelpLine(w)
   result.addView(helpline, 0, h - helpline.h)
   result.app = app

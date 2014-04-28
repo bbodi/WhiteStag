@@ -1,6 +1,8 @@
 import unicode
 import streams
 
+import engine
+
 import utfstring
 import view
 import frame
@@ -8,7 +10,6 @@ import color
 import drawbuffer
 import event
 import option
-import sdlengine
 import rect
 import scrollbar
 
@@ -28,6 +29,7 @@ type
     xPos, yPos: int
     selection: TSelectionCoord
     horizontalIndex: int
+    verticalIndex: int
     textArea: PTextArea
 
 proc convertSelectedRegionToCoords(textArea: PTextArea): TSelectionCoord =
@@ -151,22 +153,32 @@ proc handleMouse(self: PTextArea, event: PEvent) =
 proc synchronizeScrollbarsWithCursor(self: PTextArea) =
   let y = self.cursorPos.y
   let scrollY = self.verticalScrollbar.value
-  if y >= self.h + scrollY:
-    self.verticalScrollbar.add 1
+  let diff = y-scrollY - self.h
+  if diff >= 0:
+    self.verticalScrollbar.add (1 + diff)
   elif y < scrollY:
-    self.verticalScrollbar.add(-1)
+    self.verticalScrollbar.add (-1 - diff)
 
 proc handleCursorMoving*(self:PTextArea, event: PEvent) =
   let currentLineText = self.lines[self.cursorPos.y]
 
-  var goingBackward, goingForward: bool
-  case event.key:  
-  of TKey.KeyHome, TKey.KeyArrowLeft, TKey.KeyArrowUp:
-    goingBackward = true
-  of TKey.KeyEnd , TKey.KeyArrowRight, TKey.KeyArrowDown:
-    goingForward = true
-  else:
-    discard
+  let moveCount =
+    if event.key == TKey.KeyPgdn:
+      (0, 10)
+    elif event.key == TKey.KeyPgup:
+      (0, -10)
+    elif event.key ==  TKey.KeyArrowDown:
+      (0, 1)
+    elif event.key ==  TKey.KeyArrowUp:
+      (0, -1)
+    elif event.key ==  TKey.KeyArrowRight:
+      (1, 0)
+    elif event.key ==  TKey.KeyArrowLeft:
+      (-1, 0)
+    else:
+      (0, 0)
+  let goingBackward = moveCount[0] < 0 or moveCount[1] < 0
+  let goingForward = moveCount[0] > 0 or moveCount[1] > 0
 
   let shiftJustPressed = self.selectRegionStart == (-1, -1) and event.keyModifier.shift
   let shiftJustReleased = self.selectRegionStart != (-1, -1) and not event.keyModifier.shift
@@ -194,16 +206,15 @@ proc handleCursorMoving*(self:PTextArea, event: PEvent) =
     self.cursorPos.x = 0
   elif event.key == TKey.KeyEnd:
     self.cursorPos.x = currentLineText.len
-  elif event.key == TKey.KeyArrowDown and self.cursorPos.y < self.lines.len-1:
-    inc self.cursorPos.y
-    let newLineText = self.lines[self.cursorPos.y]
-    if newLineText.len <= self.cursorPos.x:
-      self.cursorPos.x = newLineText.len
-  elif event.key == TKey.KeyArrowUp and self.cursorPos.y > 0:
-    dec self.cursorPos.y
-    let newLineText = self.lines[self.cursorPos.y]
-    if newLineText.len <= self.cursorPos.x:
-      self.cursorPos.x = newLineText.len
+  else:
+    let oldPos = self.cursorPos.y
+    let newPos = self.cursorPos.y + moveCount[1]
+    self.cursorPos.y = max(0, min(self.lines.len-1, newPos))
+    if self.cursorPos.y != oldPos:
+      let newLineText = self.lines[self.cursorPos.y]
+      if newLineText.len <= self.cursorPos.x:
+        self.cursorPos.x = newLineText.len
+
   self.synchronizeScrollbarsWithCursor()
   if self.cursorPos == self.selectRegionStart:
     self.clearSelection()
@@ -256,7 +267,7 @@ proc handleKey*(self: PTextArea, event: PEvent) =
     if self.selectRegionStart != (-1, -1):
       self.deleteSelectedText()
     self.appendCharAtCursor(TRune(0x0020))
-  of TKey.KeyArrowRight, TKey.KeyArrowLeft, TKey.KeyHome, TKey.KeyEnd, TKey.KeyArrowUp, TKey.KeyArrowDown:
+  of TKey.KeyArrowRight, TKey.KeyArrowLeft, TKey.KeyHome, TKey.KeyEnd, TKey.KeyArrowUp, TKey.KeyArrowDown, TKey.KeyPgdn, TKey.KeyPgup:
     self.handleCursorMoving(event)
   of TKey.KeyBackspace:
     if self.selectRegionStart != (-1, -1):
@@ -351,7 +362,7 @@ method handleEvent*(self: PTextArea, event: PEvent) =
     if event.keyModifier.ctrl:
       if event.pressedCtrl('v'):
         event.setProcessed()
-        let text = engine.readClipBoard()
+        let text = gEngine.readClipBoard()
         self.append($text)
       return
     # TODO: characters that needs alt needs to be handled
@@ -374,7 +385,7 @@ proc createTextDrawer(textArea: PTextArea): ref TTextDrawer =
   result.textArea = textArea
 
 proc drawCursorIfNeeded(drawer: ref TTextDrawer, buff: var TDrawBuffer) =
-  let isCurrentRow = drawer.yPos == drawer.textArea.cursorPos.y
+  let isCurrentRow = drawer.verticalIndex == drawer.textArea.cursorPos.y
   let isCurrentColumn = drawer.horizontalIndex == drawer.textArea.cursorPos.x
   if isCurrentRow and isCurrentColumn and drawer.textArea.showCursor and drawer.textArea.isActive:
     let cursorDrawingPosY = drawer.yPos - drawer.textArea.verticalScrollbar.value
@@ -408,6 +419,7 @@ proc draw(drawer: ref TTextDrawer, buff: var TDrawBuffer) =
   let numberOflastLine = fromIndex + drawer.textArea.h
   let maxLineNumberWidth = ($numberOflastLine).len
   for index, line in drawer.textArea.lines[fromIndex.. <toIndex]:
+    drawer.verticalIndex = index
     inc drawer.yPos
     if drawer.textArea.showLineNumbers:
       drawer.xPos = maxLineNumberWidth

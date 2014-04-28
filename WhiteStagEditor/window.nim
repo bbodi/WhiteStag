@@ -5,7 +5,7 @@ import color
 import drawbuffer
 import event
 import option
-import sdlengine
+import engine
 import selectbox
 import rect
 import pixel
@@ -82,12 +82,12 @@ proc windowHandleEvent*(self: PWindow, event: PEvent) =
       let fontSize = cast[string](self.executeView(fontSelectBox, self.w-9, 1).data)
       var font: TFont
       case fontSize:
-      of "12": font = engine.font12
-      of "14": font = engine.font14
-      of "16": font = engine.font16
-      of "18": font = engine.font18
-      of "20": font = engine.font20
-      of "22": font = engine.font22
+      of "12": font = gEngine.loadFont(12)
+      of "14": font = gEngine.loadFont(14)
+      of "16": font = gEngine.loadFont(16)
+      of "18": font = gEngine.loadFont(18)
+      of "20": font = gEngine.loadFont(20)
+      of "22": font = gEngine.loadFont(22)
       else: 
         event.setProcessed()
         return

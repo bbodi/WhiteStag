@@ -7,7 +7,6 @@ import color
 import drawbuffer
 import event
 import option
-import sdlengine
 import rect
 
 type

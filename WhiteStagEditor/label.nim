@@ -4,7 +4,6 @@ import color
 import drawbuffer
 import event
 import pixel
-import sdlengine
 import option
 import rect
 import helpline

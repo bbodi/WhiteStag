@@ -172,4 +172,4 @@ when isMainModule:
 
       let qs = dao.findAllQuestion()
       check qs.len == 3
-      check qs.map(proc(q: ref TQuestion): int = q.id.data) == @[1, 2, 3]
+      check qs.map(proc(q: ref TQuestion): int64 = q.id.data) == @[1'i64, 2'i64, 3'i64]

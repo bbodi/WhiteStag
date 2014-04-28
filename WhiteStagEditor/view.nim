@@ -7,10 +7,8 @@ import event
 import color
 import drawbuffer
 import font
-import sdlengine
+import engine
 import bytestream
-
-var engine*: PSdlEngine
 
 type
   TGrowMode* = enum
@@ -343,7 +341,7 @@ proc drawToBackBuffer(regions: TViewRepresentations)  =
   for region in regions.representations:
     let offset = region.view.calcOffset()
     let clippingArea: TPixelRect = region.view.clippingRect
-    engine.drawToBackBuffer(region.buff, offset.x, offset.y, region.view.font, clippingArea)
+    gEngine.drawToBackBuffer(region.buff, offset.x, offset.y, region.view.font, clippingArea)
 
 proc makeLocal*(self: PView, x, y: TPixel): tuple[x, y: int] =
   let offset = self.calcOffset()
@@ -530,9 +528,9 @@ proc execute*(self: PView): TExecutingResult =
       var regions = TViewRepresentations(representations: @[])
       self.groupDraw(regions)
       drawToBackBuffer(regions)
-      engine.swapBackBuffer()
+      gEngine.swapBackBuffer()
       
-    var event = engine.pollEvent()
+    var event = gEngine.pollEvent()
     self.groupHandleEvent(event)
     
   return self.executingResult
@@ -562,8 +560,8 @@ proc executeView*(self, view: PView, x, y: int): TExecutingResult =
       var regions = TViewRepresentations(representations: @[])
       root.groupDraw(regions)
       drawToBackBuffer(regions)
-      engine.swapBackBuffer()
-    var event = engine.pollEvent()
+      gEngine.swapBackBuffer()
+    var event = gEngine.pollEvent()
     view.groupHandleEvent(event)
   self.removeView(view)
   savedFocusedView.ifSome do (savedView: PView):
