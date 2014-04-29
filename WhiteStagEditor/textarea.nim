@@ -386,31 +386,23 @@ proc createTextDrawer(textArea: PTextArea): ref TTextDrawer =
   result.textArea = textArea
 
 proc drawCursorIfNeeded(drawer: ref TTextDrawer, buff: var TDrawBuffer) =
-  let cursorDrawingPosY = drawer.yPos - drawer.textArea.verticalScrollbar.value
-
   let isCurrentRow = drawer.verticalIndex == drawer.textArea.cursorPos.y
-  if isCurrentRow:
-    buff.setCell(drawer.xPos, cursorDrawingPosY, bg = ColorRed)
   let isCurrentColumn = drawer.horizontalIndex == drawer.textArea.cursorPos.x
-  if isCurrentColumn:
-    buff.setCell(drawer.xPos, cursorDrawingPosY, bg = ColorRed)
 
   if isCurrentRow and isCurrentColumn and drawer.textArea.showCursor and drawer.textArea.isActive:
-    let cursorDrawingPosY = drawer.yPos - drawer.textArea.verticalScrollbar.value
-    buff.setCell(drawer.xPos, cursorDrawingPosY, bg = ColorRed)
+    buff.setCell(drawer.xPos, drawer.yPos, bg = ColorRed)
 
 proc drawChar(drawer: ref TTextDrawer, charToDraw: string, buff: var TDrawBuffer) =
-  let cursorDrawingPosY = drawer.yPos - drawer.textArea.verticalScrollbar.value
-  buff.writeText(drawer.xPos, cursorDrawingPosY, charToDraw, fg = TextPanelTextColor.color(drawer.textArea.isActive))
+  buff.writeText(drawer.xPos, drawer.yPos, charToDraw, fg = TextPanelTextColor.color(drawer.textArea.isActive))
   let selection = drawer.selection;
   if drawer.selection.startPos.x == -1:
     return
-  let oneLineSelection = drawer.yPos == selection.startPos.y and drawer.yPos == selection.endPos.y
+  let oneLineSelection = drawer.verticalIndex == selection.startPos.y and drawer.verticalIndex == selection.endPos.y
   let xIsOk = drawer.horizontalIndex >= selection.startPos.x and drawer.horizontalIndex < selection.endPos.x
 
-  let firstSelectedLine = drawer.yPos == selection.startPos.y and drawer.horizontalIndex >= selection.startPos.x
-  let middleSelectedLine = drawer.yPos > selection.startPos.y and drawer.yPos < selection.endPos.y
-  let lastSelectedLine = drawer.yPos == selection.endPos.y and drawer.horizontalIndex < selection.endPos.x
+  let firstSelectedLine = drawer.verticalIndex == selection.startPos.y and drawer.horizontalIndex >= selection.startPos.x
+  let middleSelectedLine = drawer.verticalIndex > selection.startPos.y and drawer.verticalIndex < selection.endPos.y
+  let lastSelectedLine = drawer.verticalIndex == selection.endPos.y and drawer.horizontalIndex < selection.endPos.x
   var needHighlight = false
   if oneLineSelection:
     if xIsOk:
@@ -418,8 +410,9 @@ proc drawChar(drawer: ref TTextDrawer, charToDraw: string, buff: var TDrawBuffer
   elif firstSelectedLine or middleSelectedLine or lastSelectedLine:
     needHighlight = true
   if needHighlight:
-    buff.setCell(drawer.xPos, cursorDrawingPosY, bg = ColorGreen)
+    buff.setCell(drawer.xPos, drawer.yPos, bg = ColorGreen)
 
+#TODO: Draw the cursor (and selection?) in a seperate process after drawing texts
 proc draw(drawer: ref TTextDrawer, buff: var TDrawBuffer) =
   drawer.yPos = -1
   let fromIndex = drawer.textArea.verticalScrollbar.value
@@ -432,7 +425,7 @@ proc draw(drawer: ref TTextDrawer, buff: var TDrawBuffer) =
     if drawer.textArea.showLineNumbers:
       drawer.xPos = maxLineNumberWidth
       buff.setCells(0, drawer.yPos, maxLineNumberWidth, 1, bg = LineNumberBgColors.color(drawer.textArea.isActive))
-      buff.writeText(0, drawer.yPos, $(index+fromIndex), fg = LineNumberFgColors.color(drawer.textArea.isActive), bg=LineNumberBgColors.color(drawer.textArea.isActive))
+      buff.writeText(0, drawer.yPos, $(index+fromIndex+1), fg = LineNumberFgColors.color(drawer.textArea.isActive), bg=LineNumberBgColors.color(drawer.textArea.isActive))
     else:
       drawer.xPos = 0
     drawer.horizontalIndex = 0
@@ -442,11 +435,13 @@ proc draw(drawer: ref TTextDrawer, buff: var TDrawBuffer) =
       if ch == "\t":
         for j in 0..3:
           drawer.drawChar(" ", buff)
-          drawer.drawCursorIfNeeded(buff)
+          if isCursorInCurrentRow:
+            drawer.drawCursorIfNeeded(buff)
           inc drawer.xPos
       else:
         drawer.drawChar(ch, buff)
-        drawer.drawCursorIfNeeded(buff)
+        if isCursorInCurrentRow:
+          drawer.drawCursorIfNeeded(buff)
         inc drawer.xPos
       inc drawer.horizontalIndex
 
