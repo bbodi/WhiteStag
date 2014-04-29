@@ -153,11 +153,12 @@ proc handleMouse(self: PTextArea, event: PEvent) =
 proc synchronizeScrollbarsWithCursor(self: PTextArea) =
   let y = self.cursorPos.y
   let scrollY = self.verticalScrollbar.value
-  let diff = y-scrollY - self.h
-  if diff >= 0:
-    self.verticalScrollbar.add (1 + diff)
-  elif y < scrollY:
-    self.verticalScrollbar.add (-1 - diff)
+  let diffDown = y-scrollY - self.h
+  let diffUp = scrollY - y
+  if diffDown >= 0:
+    self.verticalScrollbar.add (1 + diffDown)
+  elif diffUp > 0:
+    self.verticalScrollbar.add (-diffUp)
 
 proc handleCursorMoving*(self:PTextArea, event: PEvent) =
   let currentLineText = self.lines[self.cursorPos.y]
@@ -385,39 +386,46 @@ proc createTextDrawer(textArea: PTextArea): ref TTextDrawer =
   result.textArea = textArea
 
 proc drawCursorIfNeeded(drawer: ref TTextDrawer, buff: var TDrawBuffer) =
+  let cursorDrawingPosY = drawer.yPos - drawer.textArea.verticalScrollbar.value
+
   let isCurrentRow = drawer.verticalIndex == drawer.textArea.cursorPos.y
+  if isCurrentRow:
+    buff.setCell(drawer.xPos, cursorDrawingPosY, bg = ColorRed)
   let isCurrentColumn = drawer.horizontalIndex == drawer.textArea.cursorPos.x
+  if isCurrentColumn:
+    buff.setCell(drawer.xPos, cursorDrawingPosY, bg = ColorRed)
+
   if isCurrentRow and isCurrentColumn and drawer.textArea.showCursor and drawer.textArea.isActive:
     let cursorDrawingPosY = drawer.yPos - drawer.textArea.verticalScrollbar.value
     buff.setCell(drawer.xPos, cursorDrawingPosY, bg = ColorRed)
 
 proc drawChar(drawer: ref TTextDrawer, charToDraw: string, buff: var TDrawBuffer) =
-  buff.writeText(drawer.xPos, drawer.yPos, charToDraw, fg = TextPanelTextColor.color(drawer.textArea.isActive))
+  let cursorDrawingPosY = drawer.yPos - drawer.textArea.verticalScrollbar.value
+  buff.writeText(drawer.xPos, cursorDrawingPosY, charToDraw, fg = TextPanelTextColor.color(drawer.textArea.isActive))
   let selection = drawer.selection;
-  if drawer.selection.startPos.x != -1:
-    let oneLineSelection = drawer.yPos == selection.startPos.y and drawer.yPos == selection.endPos.y
-    let xIsOk = drawer.horizontalIndex >= selection.startPos.x and drawer.horizontalIndex < selection.endPos.x
+  if drawer.selection.startPos.x == -1:
+    return
+  let oneLineSelection = drawer.yPos == selection.startPos.y and drawer.yPos == selection.endPos.y
+  let xIsOk = drawer.horizontalIndex >= selection.startPos.x and drawer.horizontalIndex < selection.endPos.x
 
-    let firstSelectedLine = drawer.yPos == selection.startPos.y and drawer.horizontalIndex >= selection.startPos.x
-    let middleSelectedLine = drawer.yPos > selection.startPos.y and drawer.yPos < selection.endPos.y
-    let lastSelectedLine = drawer.yPos == selection.endPos.y and drawer.horizontalIndex < selection.endPos.x
-    var needHighlight = false
-    if oneLineSelection:
-      if xIsOk:
-        needHighlight = true
-    elif firstSelectedLine or middleSelectedLine or lastSelectedLine:
+  let firstSelectedLine = drawer.yPos == selection.startPos.y and drawer.horizontalIndex >= selection.startPos.x
+  let middleSelectedLine = drawer.yPos > selection.startPos.y and drawer.yPos < selection.endPos.y
+  let lastSelectedLine = drawer.yPos == selection.endPos.y and drawer.horizontalIndex < selection.endPos.x
+  var needHighlight = false
+  if oneLineSelection:
+    if xIsOk:
       needHighlight = true
-    if needHighlight:
-      buff.setCell(drawer.xPos, drawer.yPos, bg = ColorGreen)
-  drawer.drawCursorIfNeeded(buff)
-  inc drawer.xPos
+  elif firstSelectedLine or middleSelectedLine or lastSelectedLine:
+    needHighlight = true
+  if needHighlight:
+    buff.setCell(drawer.xPos, cursorDrawingPosY, bg = ColorGreen)
 
 proc draw(drawer: ref TTextDrawer, buff: var TDrawBuffer) =
   drawer.yPos = -1
   let fromIndex = drawer.textArea.verticalScrollbar.value
   let toIndex = drawer.textArea.lines.len
-  let numberOflastLine = fromIndex + drawer.textArea.h
-  let maxLineNumberWidth = ($numberOflastLine).len
+  let numberOflastDrawnLine = fromIndex + drawer.textArea.h
+  let maxLineNumberWidth = ($numberOflastDrawnLine).len
   for index, line in drawer.textArea.lines[fromIndex.. <toIndex]:
     drawer.verticalIndex = index
     inc drawer.yPos
@@ -428,14 +436,20 @@ proc draw(drawer: ref TTextDrawer, buff: var TDrawBuffer) =
     else:
       drawer.xPos = 0
     drawer.horizontalIndex = 0
+    let isCursorInCurrentRow = drawer.verticalIndex == drawer.textArea.cursorPos.y
     for i in 0..line.len-1:
       let ch = line.at(i)
       if ch == "\t":
         for j in 0..3:
           drawer.drawChar(" ", buff)
+          drawer.drawCursorIfNeeded(buff)
+          inc drawer.xPos
       else:
         drawer.drawChar(ch, buff)
+        drawer.drawCursorIfNeeded(buff)
+        inc drawer.xPos
       inc drawer.horizontalIndex
+
     drawer.drawCursorIfNeeded(buff)
     
 
